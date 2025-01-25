@@ -34,4 +34,7 @@
     local-name: fast_odom_convert
     uri: https://github.com/KBKN-Autonomous-Robotics-Lab/fast_odom_convert.git
     version: main
-
+- git:
+    local-name: Use_Action
+    uri: https://github.com/kugurofu/Use_Action.git
+    version: main
