@@ -18,6 +18,12 @@ find_package(tf2_ros REQUIRED)
 find_package(pcl_ros REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(PCL REQUIRED)
+find_package(serial REQUIRED)
+
+# Add include directories
+include_directories(
+  include
+)
 
 set(dependencies
   rclcpp
@@ -46,8 +52,16 @@ install(TARGETS laserscan_multi_merger
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
+# Create cpp executable
+add_executable(led_node src/led_node.cpp)
+ament_target_dependencies(led_node rclcpp std_msgs serial)
+
+# Install cpp executable
+install(TARGETS led_node
+  DESTINATION lib/${PROJECT_NAME})
+
 # install
-install(DIRECTORY src launch config
+install(DIRECTORY config include launch src
   DESTINATION share/${PROJECT_NAME}/
 )
 
