@@ -7,6 +7,8 @@ LedController::LedController()
 {
     port_name_ = this->declare_parameter<std::string>("serial_port", "/dev/sensors/LED");
     baud_rate_ = this->declare_parameter<int>("baud_rate", 115200);
+    nav_topic_ = this->declare_parameter<std::string>("nav_topic", "/nav_state");
+    estop_topic_ = this->declare_parameter<std::string>("estop_topic", "/estop");
 
     try
     {
@@ -22,9 +24,9 @@ LedController::LedController()
     }
 
     nav_sub_ = this->create_subscription<std_msgs::msg::Bool>(
-        "/nav_state", 10, std::bind(&LedController::navCallback, this, std::placeholders::_1));
+        nav_topic_, 10, std::bind(&LedController::navCallback, this, std::placeholders::_1));
     estop_sub_ = this->create_subscription<std_msgs::msg::Bool>(
-        "/estop_state", 10, std::bind(&LedController::estopCallback, this, std::placeholders::_1));
+        estop_topic_, 10, std::bind(&LedController::estopCallback, this, std::placeholders::_1));
     timer_ = this->create_wall_timer(200ms, std::bind(&LedController::sendSerialCommand, this));
 
     if (serial_port_.isOpen())

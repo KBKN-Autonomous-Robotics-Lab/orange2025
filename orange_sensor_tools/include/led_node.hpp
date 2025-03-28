@@ -26,6 +26,8 @@ private:
 
     std::string port_name_;
     int baud_rate_;
+    std::string nav_topic_;
+    std::string estop_topic_;
     bool nav_state_;
     bool estop_state_;
     std::string led_state_;
