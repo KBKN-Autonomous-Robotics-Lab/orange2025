@@ -34,6 +34,10 @@ class GPSData(Node):
         self.odom_pub = self.create_publisher(Odometry, "/odom/UM982", 10)
         self.odom_msg = Odometry()
         
+        # add fix topic
+        self.lonlat_pub = self.create_publisher(NavSatFix, "/fix", 1)
+        self.lonlat_msg = NavSatFix()
+        
         self.timer = self.create_timer(1.0, self.publish_GPS_lonlat_quat)
 
         self.get_logger().info("Start get_lonlat quat node")
@@ -255,6 +259,21 @@ class GPSData(Node):
         if GPS_data and GPS_data[1] != 0 and GPS_data[2] != 0:
             self.satelite = GPS_data[4]
             lonlat = [GPS_data[1], GPS_data[2]]
+            
+            # publish fix topic
+            self.lonlat_msg.header = Header()
+            self.lonlat_msg.frame_id = "gps"
+            self.lonlat_msg.header.stamp = self.get_clock().now().to_msg()
+            
+            self.lonlat_msg.status.status = NavSatStatus.STATUS_FIX if lonlat[
+                0] != 0 else NavSatStatus.STATUS_NO_FIX
+            self.lonlat_msg.latitude = GPS_data[1] # ido
+            self.lonlat_msg.longitude = GPS_data[2] # keido
+            self.lonlat_msg.altitude = GPS_data[3] # koudo
+            
+            self.lonlat_pub.publish(self.lonlat_msg)
+            # self.get_logger().info(f"Published GPS data: {lonlat}")           
+            
             if self.initial_coordinate is None:
                 self.initial_coordinate = [GPS_data[1], GPS_data[2]]        
             GPSxy = self.conversion(lonlat, self.initial_coordinate, self.theta)
