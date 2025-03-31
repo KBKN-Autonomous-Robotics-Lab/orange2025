@@ -17,13 +17,6 @@ def generate_launch_description():
         'launch',
         'livox_to_pointcloud2.launch.py'
     )
-    #fast_lio launch    
-    #fast_lio_launch_file = os.path.join(
-    #    get_package_share_directory('fast_lio'),
-    #    'launch',
-    #    'mapping.launch.py'
-    #)
-    
     
     return LaunchDescription([
         #rviz2
@@ -38,10 +31,6 @@ def generate_launch_description():
             PythonLaunchDescriptionSource(livox_to_pointcloud2_launch_file)
         ),
         
-        #fast_lio launch 
-        #IncludeLaunchDescription(
-        #    PythonLaunchDescriptionSource(fast_lio_launch_file)
-        #),
         #pcd rotation
         Node(package='pcd_convert',
             executable='pcd_rotation',
@@ -49,29 +38,7 @@ def generate_launch_description():
             output='screen',
             arguments=[]
         ),
-        #fast_odom convert
-        #Node(package='fast_odom_convert',
-        #    executable='fast_odom_convert',
-        #    name='fast_odom_convert_node',
-        #    output='screen',
-        #    arguments=[]
-        #),
-        ##ekf odom
-        #Node(package='try_navigation',
-        #    executable='ekf_myself_odom',
-        #    name='sensor_fusion_odom',
-        #    output='screen',
-        #    arguments=[]
-        #),
-        
-        #gps ekf edit
-        #Node(package='try_navigation',
-        #    executable='ekf_myself_match',
-        #    name='sensor_fusion',
-        #    output='screen',
-        #    arguments=[]
-        #),
-        
+   
         #gps ekf edit
         Node(package='try_navigation',
             executable='ekf_myself_gps',
@@ -96,12 +63,10 @@ def generate_launch_description():
         ),
         
         ##waypoint manager
-        #Node(package='try_navigation',
-        #    executable='waypoint_manager_maprun',
-        #    name='waypoint_manager_maprun_node',
-        #    output='screen',
-        #    arguments=[],
-        #),
+        
+        # waypoint gps command
+        # $ ros2 run navigation_control gps_waypoint
+        # file path /ros2_ws/src/Use_action/navigation_control/navigation_control/gps_waypoint
         
         #reflection intensity map
         Node(package='try_navigation',
@@ -124,7 +89,8 @@ def generate_launch_description():
         #    output='screen',
         #    arguments=[],
         #),
-        #path planning
+        
+        #navigation start
         Node(package='navigation_control',
             executable='button',
             name='button',
