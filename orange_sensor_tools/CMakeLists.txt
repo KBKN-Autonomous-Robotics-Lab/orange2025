@@ -61,7 +61,7 @@ install(TARGETS led_node
   DESTINATION lib/${PROJECT_NAME})
 
 # install
-install(DIRECTORY config include launch src
+install(DIRECTORY config firmware include launch src
   DESTINATION share/${PROJECT_NAME}/
 )
 
