@@ -1,47 +1,66 @@
 #!/usr/bin/env python3
+import math
 import rclpy
 import serial
-import math
-from nav_msgs.msg import Odometry
 from rclpy.node import Node
-from sensor_msgs.msg import NavSatFix, NavSatStatus
+from sensor_msgs.msg import Imu, NavSatFix, NavSatStatus
+from nav_msgs.msg import Odometry
 from std_msgs.msg import Header
-
+from geometry_msgs.msg import Quaternion, Pose, Point, Twist, Vector3
 
 class GPSData(Node):
     def __init__(self):
         super().__init__('gps_data_acquisition')
 
+        # Parameters
         self.declare_parameter('port', '/dev/sensors/GNSS_UM982')
         self.declare_parameter('baud', 115200)
         self.declare_parameter('country_id', 0)
         self.declare_parameter('Position_magnification', 1.675)
         self.declare_parameter('heading', 180)
-        #self.declare_parameter('heading', 270)
 
         self.dev_name = self.get_parameter('port').get_parameter_value().string_value
         self.serial_baud = self.get_parameter('baud').get_parameter_value().integer_value
         self.country_id = self.get_parameter('country_id').get_parameter_value().integer_value
         self.Position_magnification = self.get_parameter('Position_magnification').get_parameter_value().double_value
         self.theta = self.get_parameter('heading').get_parameter_value().double_value
-
+        
         self.theta = 275.6 # tukuba param
         #self.theta = 180 #nakaniwa param
         self.initial_coordinate = None
         self.fix_data = None
         self.count = 0
-        
-        self.odom_pub = self.create_publisher(Odometry, "/odom/UM982", 10)
-        self.odom_msg = Odometry()
-        
-        # add fix topic
-        self.lonlat_pub = self.create_publisher(NavSatFix, "/fix", 1)
-        self.lonlat_msg = NavSatFix()
-        
-        self.timer = self.create_timer(1.0, self.publish_GPS_lonlat_quat)
 
-        self.get_logger().info("Start get_lonlat quat node")
+        # Publishers
+        self.lonlat_pub = self.create_publisher(NavSatFix, '/fix', 1)
+        self.lonlat_msg = NavSatFix()
+        self.movingbase_pub = self.create_publisher(Imu, '/movingbase/quat', 10)
+        self.movingbase_msg = Imu()
+        self.odom_pub = self.create_publisher(Odometry, '/odom/UM982', 10)
+        self.odom_msg = Odometry()
+
+        # Timers
+        self.timer = self.create_timer(1.0, self.timer_callback)
+
+        self.first_heading = None
+
+        self.get_logger().info("Start get_lonlat_movingbase_quat_ttyUSB node")
         self.get_logger().info("-------------------------")
+    
+    def timer_callback(self):
+        data = self.get_gps_quat(self.dev_name, self.country_id)
+
+        if data:
+            fix_type, lat, lon, alt, _, heading = data
+            if fix_type != 0:
+                self.publish_fix(data)
+                self.publish_odom(lat, lon, alt)
+                self.publish_movingbase(heading)
+            else:
+                self.get_logger().error("GPS not fixed")
+        else:
+            self.get_logger().error("Failed to get GPS data")
+
 
     def get_gps_quat(self, dev_name, country_id):
         # interface with sensor device(as a serial port)
@@ -156,8 +175,7 @@ class GPSData(Node):
         q[2] = sy * cp * sr + cy * sp * cr
         q[3] = sy * cp * cr - cy * sp * sr
         return q
-    
-    
+
     def heading_to_quat(self ,real_heading):
 
         robotheading = real_heading + 90
@@ -252,27 +270,76 @@ class GPSData(Node):
         point = (h_y, -h_x)
 
         return point
+
+    def publish_fix(self, gps):
+        lonlat = self.get_gps_quat(self.dev_name, self.country_id)
+        if lonlat:
+            self.lonlat_msg.header = Header()
+            self.lonlat_msg.header.frame_id = "gps"
+            self.lonlat_msg.header.stamp = self.get_clock().now().to_msg()
+
+            self.lonlat_msg.status.status = NavSatStatus.STATUS_FIX if lonlat[
+                0] != 0 else NavSatStatus.STATUS_NO_FIX
+            self.lonlat_msg.latitude = float(lonlat[1])
+            self.lonlat_msg.longitude = float(lonlat[2])
+            self.lonlat_msg.altitude = float(lonlat[3])
+
+            self.lonlat_pub.publish(self.lonlat_msg)
+            # self.get_logger().info(f"Published GPS data: {lonlat}")
+        else:
+            self.get_logger().error("!!!!-gps data error-!!!!")
     
-    def publish_GPS_lonlat_quat(self):
+    def publish_movingbase(self, heading):
+        if heading is not None and heading != 0.0:
+            robotheading = heading + 90.0
+            if robotheading >= 360.0:
+                robotheading -= 360.0
+
+            if self.count == 0:
+                self.get_logger().info(f"!!!----------robotheading: {robotheading} deg----------!!!")
+                self.first_heading = robotheading
+                self.count = 1
+
+            relative_heading = robotheading - self.first_heading
+            if relative_heading < 0:
+                relative_heading += 360.0
+            if relative_heading > 180.0:
+                relative_heading -= 360.0
+
+            movingbaseyaw = relative_heading * (math.pi / 180.0)
+
+            roll, pitch = 0.0, 0.0
+            yaw = movingbaseyaw
+            q = self.quaternion_from_euler(roll, pitch, yaw)
+
+            self.movingbase_msg.header.stamp = self.get_clock().now().to_msg()
+            self.movingbase_msg.header.frame_id = "imu_link"
+            self.movingbase_msg.orientation.x = q[1]
+            self.movingbase_msg.orientation.y = q[2]
+            self.movingbase_msg.orientation.z = -q[3]  # -z方向
+            self.movingbase_msg.orientation.w = q[0]
+            self.movingbase_msg.orientation_covariance[0] = robotheading
+
+            self.movingbase_pub.publish(self.movingbase_msg)
+
+        else:
+            self.movingbase_msg.header.stamp = self.get_clock().now().to_msg()
+            self.movingbase_msg.header.frame_id = "imu_link"
+            self.movingbase_msg.orientation.x = 0.0
+            self.movingbase_msg.orientation.y = 0.0
+            self.movingbase_msg.orientation.z = 0.0
+            self.movingbase_msg.orientation.w = 0.0
+ 
+            self.movingbase_pub.publish(self.movingbase_msg)
+            self.get_logger().error("!!!!-not movingbase data-!!!!")
+
+            
+    def publish_odom(self, lat, lon, alt):
         GPS_data = self.get_gps_quat(self.dev_name, self.country_id)
         #gnggadata = (Fixtype_data,latitude_data,longitude_data,altitude_data,satelitecount_data,heading)
         if GPS_data and GPS_data[1] != 0 and GPS_data[2] != 0:
             self.satelite = GPS_data[4]
             lonlat = [GPS_data[1], GPS_data[2]]
-            
-            # publish fix topic
-            #self.lonlat_msg.header = Header()
-            #self.lonlat_msg.frame_id = "gps"
-            #self.lonlat_msg.header.stamp = self.get_clock().now().to_msg()
-            
-            #self.lonlat_msg.status.status = NavSatStatus.STATUS_FIX if lonlat[
-            #    0] != 0 else NavSatStatus.STATUS_NO_FIX
-            #self.lonlat_msg.latitude = GPS_data[1] # ido
-            #self.lonlat_msg.longitude = GPS_data[2] # keido
-            #self.lonlat_msg.altitude = GPS_data[3] # koudo
-            
-            #self.lonlat_pub.publish(self.lonlat_msg)
-            # self.get_logger().info(f"Published GPS data: {lonlat}")           
             
             if self.initial_coordinate is None:
                 self.initial_coordinate = [GPS_data[1], GPS_data[2]]        
@@ -295,7 +362,6 @@ class GPSData(Node):
         else:
             self.get_logger().error("!!!!-NOT RECIEVE-gps data error-!!!!")
 
-
 def main(args=None):
     rclpy.init(args=args)
     gpslonlat = GPSData()
@@ -303,6 +369,6 @@ def main(args=None):
     gpslonlat.destroy_node()
     rclpy.shutdown()
 
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
+
