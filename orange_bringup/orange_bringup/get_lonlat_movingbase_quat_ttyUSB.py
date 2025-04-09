@@ -43,17 +43,19 @@ class GPSData(Node):
         self.timer = self.create_timer(1.0, self.timer_callback)
 
         self.first_heading = None
+        
+        self.gps_data_cache = None
 
         self.get_logger().info("Start get_lonlat_movingbase_quat_ttyUSB node")
         self.get_logger().info("-------------------------")
     
     def timer_callback(self):
-        data = self.get_gps_quat(self.dev_name, self.country_id)
+        self.gps_data_cache = self.get_gps_quat(self.dev_name, self.country_id)
 
-        if data:
-            fix_type, lat, lon, alt, _, heading = data
+        if self.gps_data_cache:
+            fix_type, lat, lon, alt, _, heading = self.gps_data_cache
             if fix_type != 0:
-                self.publish_fix(data)
+                self.publish_fix(self.gps_data_cache)
                 self.publish_odom(lat, lon, alt)
                 self.publish_movingbase(heading)
             else:
@@ -272,22 +274,25 @@ class GPSData(Node):
         return point
 
     def publish_fix(self, gps):
-        lonlat = self.get_gps_quat(self.dev_name, self.country_id)
-        if lonlat:
-            self.lonlat_msg.header = Header()
-            self.lonlat_msg.header.frame_id = "gps"
-            self.lonlat_msg.header.stamp = self.get_clock().now().to_msg()
+        #lonlat = self.get_gps_quat(self.dev_name, self.country_id)
+        #if lonlat:
+        self.lonlat_msg.header = Header()
+        self.lonlat_msg.header.frame_id = "gps"
+        self.lonlat_msg.header.stamp = self.get_clock().now().to_msg()
 
-            self.lonlat_msg.status.status = NavSatStatus.STATUS_FIX if lonlat[
-                0] != 0 else NavSatStatus.STATUS_NO_FIX
-            self.lonlat_msg.latitude = float(lonlat[1])
-            self.lonlat_msg.longitude = float(lonlat[2])
-            self.lonlat_msg.altitude = float(lonlat[3])
+        self.lonlat_msg.status.status = NavSatStatus.STATUS_FIX if gps[
+            0] != 0 else NavSatStatus.STATUS_NO_FIX
+        #self.lonlat_msg.latitude = float(lonlat[1])
+        #self.lonlat_msg.longitude = float(lonlat[2])
+        #self.lonlat_msg.altitude = float(lonlat[3])
+        self.lonlat_msg.latitude = gps[1]
+        self.lonlat_msg.longitude = gps[2]
+        self.lonlat_msg.altitude = gps[3]
 
-            self.lonlat_pub.publish(self.lonlat_msg)
+        self.lonlat_pub.publish(self.lonlat_msg)
             # self.get_logger().info(f"Published GPS data: {lonlat}")
-        else:
-            self.get_logger().error("!!!!-gps data error-!!!!")
+        #else:
+        #    self.get_logger().error("!!!!-gps data error-!!!!")
     
     def publish_movingbase(self, heading):
         if heading is not None and heading != 0.0:
@@ -335,9 +340,11 @@ class GPSData(Node):
 
             
     def publish_odom(self, lat, lon, alt):
-        GPS_data = self.get_gps_quat(self.dev_name, self.country_id)
+        #GPS_data = self.get_gps_quat(self.dev_name, self.country_id)
         #gnggadata = (Fixtype_data,latitude_data,longitude_data,altitude_data,satelitecount_data,heading)
-        if GPS_data and GPS_data[1] != 0 and GPS_data[2] != 0:
+        #if GPS_data and GPS_data[1] != 0 and GPS_data[2] != 0:
+        if self.gps_data_cache and self.gps_data_cache[1] != 0 and self.gps_data_cache[2] != 0:
+            GPS_data = self.gps_data_cache
             self.satelite = GPS_data[4]
             lonlat = [GPS_data[1], GPS_data[2]]
             
