@@ -56,7 +56,8 @@ setup(
             'ekf_myself_match = try_navigation.ekf_myself_match:main',
             'ekf_myself_gps = try_navigation.ekf_myself_gps:main',
             'ekf_myself_odom = try_navigation.ekf_myself_odom:main',
-            'map_check = try_navigation.map_check:main'
+            'map_check = try_navigation.map_check:main',
+            'line_filter = try_navigation.line_filter:main'
         ],
     },
 )
