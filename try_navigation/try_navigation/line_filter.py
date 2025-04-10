@@ -83,13 +83,21 @@ class linefilter(Node):
         return cv2.Canny(image, 50, 150)
 
     def detect_lines(self, image):
-        lines = cv2.HoughLinesP(image, 1, np.pi / 180, threshold=100, minLineLength=20, maxLineGap=10)
+        lines = cv2.HoughLinesP(image, 1, np.pi / 180, threshold=60, minLineLength=30, maxLineGap=20)
         line_image = np.zeros_like(image)
         if lines is not None:
             for line in lines:
                 x1, y1, x2, y2 = line[0]
                 cv2.line(line_image, (x1, y1), (x2, y2), 255, 1)
         return line_image
+        '''
+パラメータ	 数学的意味	                           画像処理的な意味
+rho=1	         ρの分解能（ピクセル単位）        距離の精度
+theta=np.pi/180	 θの分解能（1度刻み）	          角度の精度
+threshold=100	 投票数の閾値	                           これ以上の点が並んでいると直線と判定
+minLineLength    最小線分長（ピクセル）	          これより短い線分は無視
+maxLineGap	 許容する最大ギャップ                    線分間の切れ目を補完する許容範囲
+'''
         
     def log_image_size(self, image):
     	height, width = image.shape
