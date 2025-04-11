@@ -85,7 +85,7 @@ class GPSData(Node):
 
         while(1):
             line = serial_port.readline()
-            self.get_logger().info(f"line: {line}")
+            #self.get_logger().info(f"line: {line}")
             talker_ID_indoor = line.find(initial_letters_indoor)
             talker_ID_outdoor = line.find(initial_letters_outdoor)            
             if talker_ID_indoor != -1:
@@ -268,8 +268,9 @@ class GPSData(Node):
         r_theta = theta * degree_to_radian
         h_x = math.cos(r_theta) * gps_x - math.sin(r_theta) * gps_y
         h_y = math.sin(r_theta) * gps_x + math.cos(r_theta) * gps_y
+        point = (-h_x, h_y)
         #point = (-h_y, h_x)
-        point = (h_y, -h_x)
+        #point = (h_y, -h_x)
 
         return point
 
