@@ -33,6 +33,8 @@ import subprocess
 from cv_bridge import CvBridge
 from sensor_msgs.msg import Image
 from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSHistoryPolicy, QoSReliabilityPolicy
+from sensor_msgs.msg import PointCloud2, PointField
+import sensor_msgs_py.point_cloud2 as pc2
 
 
 class linefilter(Node):
@@ -42,7 +44,9 @@ class linefilter(Node):
         # 入力PGMファイルのパス（絶対パス推奨）
         self.input_path = '/home/ubuntu/ros2_ws/src/kbkn_maps/maps/tsukuba/whiteline/whiteline.pgm'
         self.output_dir = '/home/ubuntu/ros2_ws/src/kbkn_maps/maps/tsukuba/whiteline'
-
+        self.dotted_pub = self.create_publisher(PointCloud2, 'dotted_lines', 10)
+        self.solid_pub = self.create_publisher(PointCloud2, 'solid_lines', 10)
+        
         os.makedirs(self.output_dir, exist_ok=True)
 
         self.get_logger().info("Line Filter Node started.")
@@ -62,11 +66,20 @@ class linefilter(Node):
             binary_filename = self.save_image(binary_image, 'binary_output.pgm')
             edge_image = self.detect_edges(binary_image)
             edge_filename = self.save_image(edge_image, 'edge_output.pgm')
-            hough_image = self.detect_lines(edge_image)
-            hough_filename = self.save_image(hough_image, 'hough_output.pgm')
-            self.log_image_size(hough_image)
+            #hough_image = self.detect_lines(edge_image)
+           # hough_filename = self.save_image(hough_image, 'hough_output.pgm')
+            #self.log_image_size(hough_image)
+            
+            dotted_cloud, solid_cloud = self.detect_lines(edge_image,step=1.0)
 
-            self.get_logger().info(f"PGM処理完了: {pgm_filename}, {binary_filename}, {edge_filename}, {hough_filename}")
+            # 行列として表示 or 保存したい場合
+            np.save(os.path.join(self.output_dir, 'dotted_lines.npy'), dotted_cloud)
+            np.save(os.path.join(self.output_dir, 'solid_lines.npy'), solid_cloud)
+            self.get_logger().info(f"PGM処理完了: {pgm_filename}, {binary_filename}, {edge_filename}, ") #{hough_filename}
+            
+            #dotted_cloud, solid_cloud = self.classify_lines_to_pointcloud(edge_image, step=1.0)
+           # self.publish_pointclouds(solid_cloud, dotted_cloud)
+
         except Exception as e:
             self.get_logger().error(f"画像処理中にエラーが発生しました: {e}")    
 
@@ -82,14 +95,46 @@ class linefilter(Node):
     def detect_edges(self, image):
         return cv2.Canny(image, 50, 150)
 
-    def detect_lines(self, image):
+    def detect_lines(self, image,step=1.0):
         lines = cv2.HoughLinesP(image, 1, np.pi / 180, threshold=60, minLineLength=30, maxLineGap=20)
+
+        dotted_points = []
+        solid_points = []
+        
         line_image = np.zeros_like(image)
         if lines is not None:
             for line in lines:
                 x1, y1, x2, y2 = line[0]
-                cv2.line(line_image, (x1, y1), (x2, y2), 255, 1)
-        return line_image
+                length = np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+                
+                
+                num_points = max(int(length / step), 2)
+                xs = np.linspace(x1, x2, num_points)
+                ys = np.linspace(y1, y2, num_points)
+
+                line_points = [[x, y, 0] for x, y in zip(xs, ys)]
+
+                if length < 40:
+                    dotted_points.extend(line_points)
+                else:
+                    solid_points.extend(line_points)
+                    
+                
+                '''if length < 40:
+                    dotted_points.append([x1, y1, 0])
+                    dotted_points.append([x2, y2, 0])
+                else:
+                    solid_points.append([x1, y1, 0])
+                    solid_points.append([x2, y2, 0])'''
+                
+                
+              #  cv2.line(line_image, (x1, y1), (x2, y2), 255, 1)
+        dotted_array = np.array(dotted_points, dtype=np.float32)
+        solid_array = np.array(solid_points, dtype=np.float32)
+        self.get_logger().info(f"点線ポイント数: {len(dotted_array)}, 直線ポイント数: {len(solid_array)}")
+
+        return dotted_array, solid_array
+        #return line_image
         '''
 パラメータ	 数学的意味	                           画像処理的な意味
 rho=1	         ρの分解能（ピクセル単位）        距離の精度
@@ -98,6 +143,33 @@ threshold=100	 投票数の閾値	                           これ以上の点�
 minLineLength    最小線分長（ピクセル）	          これより短い線分は無視
 maxLineGap	 許容する最大ギャップ                    線分間の切れ目を補完する許容範囲
 '''
+
+    def publish_pointclouds(self, solid_array, dotted_array):
+        fields = [
+            PointField(name='x', offset=0, datatype=PointField.FLOAT32, count=1),
+            PointField(name='y', offset=4, datatype=PointField.FLOAT32, count=1),
+            PointField(name='z', offset=8, datatype=PointField.FLOAT32, count=1),
+        ]
+
+        stamp = self.get_clock().now().to_msg()
+
+        solid_pc = pc2.create_cloud(
+            header=rclpy.time.Time().to_msg(),
+            fields=fields,
+            points=solid_array.tolist()
+        )
+        solid_pc.header.frame_id = "odom"
+
+        dotted_pc = pc2.create_cloud(
+            header=rclpy.time.Time().to_msg(),
+            fields=fields,
+            points=dotted_array.tolist()
+        )
+        dotted_pc.header.frame_id = "odom"
+
+        self.solid_pub.publish(solid_pc)
+        self.dotted_pub.publish(dotted_pc)
+        self.get_logger().info("直線・点線の点群をパブリッシュしました")
         
     def log_image_size(self, image):
     	height, width = image.shape
@@ -108,7 +180,8 @@ maxLineGap	 許容する最大ギャップ                    線分間の切れ
 def main(args=None):
     rclpy.init(args=args)
     node = linefilter()
-    rclpy.spin_once(node, timeout_sec=2.0)  # 一度だけ処理を実行して終了する
+    #rclpy.spin_once(node, timeout_sec=2.0)  # 一度だけ処理を実行して終了する
+    rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
 
