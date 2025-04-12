@@ -80,7 +80,7 @@
   <!-- GPSposition_publisher -->
   <!-- initial heading:housei nakaniwa=179.169287 tsukuba= 276.5 -->
   <!-- GPSheading_publisher -->
-  <node pkg="orange_bringup" exec="get_lonlat_movingbase_quat_ttyUSB" output="screen">
+  <node pkg="orange_gnss" exec="get_lonlat_movingbase_quat_ttyUSB" output="screen">
     <param name="port" value="/dev/sensors/GNSS_UM982"/>
     <param name="baud" value="115200"/>
     <param name="country_id" value="0"/>
@@ -89,14 +89,14 @@
     <param name="time_out" value="1.0"/>
   </node>
   <!-- 
-  <node pkg="orange_bringup" exec="GPSodom_correction" output="screen">
+  <node pkg="orange_gnss" exec="GPSodom_correction" output="screen">
   </node>
    -->
   <!-- combination_GPSposition_GPSheading -->
-  <node pkg="orange_bringup" exec="combination" output="screen">
+  <node pkg="orange_gnss" exec="combination" output="screen">
   </node>
   <!-- ekf_myself -->
-  <!-- node pkg="orange_bringup" exec="ekf_myself" output="screen" >
+  <!-- node pkg="orange_gnss" exec="ekf_myself" output="screen" >
     <param name="ekf_publish_TF" value="True"/>
   </node> -->
   <!-- hokuyo -->
