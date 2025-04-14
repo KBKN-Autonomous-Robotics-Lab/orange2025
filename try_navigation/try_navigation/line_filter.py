@@ -39,11 +39,11 @@ from std_msgs.msg import Header
 
 
 class linefilter(Node):
-    def __init__(self):
+    '''def __init__(self):
         super().__init__('line_filter_node')
 
-        # 入力PGMファイルのパス（絶対パス推奨）
-        self.input_path = '/home/ubuntu/ros2_ws/src/kbkn_maps/maps/tsukuba/whiteline/whiteline.pgm'
+        # 入力PGMファイルのパス（絶対パス推奨）a
+        self.input_path = '/home/ubuntu/ros2_ws/src/kbkn_maps/maps/tsukuba/whiteline/whiteline1.pgm'
         self.output_dir = '/home/ubuntu/ros2_ws/src/kbkn_maps/maps/tsukuba/whiteline'
         self.dotted_pub = self.create_publisher(PointCloud2, 'dotted_lines', 10)
         self.solid_pub = self.create_publisher(PointCloud2, 'solid_lines', 10)
@@ -51,6 +51,22 @@ class linefilter(Node):
         os.makedirs(self.output_dir, exist_ok=True)
 
         self.get_logger().info("Line Filter Node started.")
+        #self.check_pgm_load()
+        self.process_pgm()'''
+    def __init__(self):
+        super().__init__('line_filter_node')
+
+        # 入力PGMファイルのパス（絶対パス推奨）
+        self.input_path = '/home/ubuntu/ros2_ws/src/kbkn_maps/maps/tsukuba/whiteline/whiteline1.pgm'
+        self.yaml_path = '/home/ubuntu/ros2_ws/src/kbkn_maps/maps/tsukuba/whiteline/whiteline1.yaml'
+        self.output_dir = '/home/ubuntu/ros2_ws/src/kbkn_maps/maps/tsukuba/whiteline'
+        self.dotted_pub = self.create_publisher(PointCloud2, 'dotted_lines', 10)
+        self.solid_pub = self.create_publisher(PointCloud2, 'solid_lines', 10)
+        
+        os.makedirs(self.output_dir, exist_ok=True)
+        self.get_logger().info("Line Filter Node started.")
+        
+        self.load_yaml_parameters()
         #self.check_pgm_load()
         self.process_pgm()
         
@@ -100,7 +116,7 @@ class linefilter(Node):
         return cv2.Canny(image, 50, 150)
 
     def detect_lines(self, image):
-        lines = cv2.HoughLinesP(image, 1, np.pi / 180, threshold=60, minLineLength=30, maxLineGap=20)
+        lines = cv2.HoughLinesP(image, 1, np.pi / 180, threshold=50, minLineLength=30, maxLineGap=20)
         line_image = np.zeros_like(image)
         dot_image = np.zeros_like(image)
         solid_image = np.zeros_like(image)
@@ -129,7 +145,7 @@ class linefilter(Node):
 
 
     def classify_lines_to_pointcloud(self, image,step=1.0):
-        lines = cv2.HoughLinesP(image, 1, np.pi / 180, threshold=60, minLineLength=30, maxLineGap=20)
+        lines = cv2.HoughLinesP(image, 1, np.pi / 180, threshold=100, minLineLength=30, maxLineGap=20)
 
         dotted_points = []
         solid_points = []
@@ -139,8 +155,7 @@ class linefilter(Node):
             for line in lines:
                 x1, y1, x2, y2 = line[0]
                 length = np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
-                
-                
+
                 num_points = max(int(length / step), 2)
                 xs = np.linspace(x1, x2, num_points)
                 ys = np.linspace(y1, y2, num_points)
@@ -194,7 +209,17 @@ maxLineGap	 許容する最大ギャップ                    線分間の切れ
     def log_image_size(self, image):
     	height, width = image.shape
     	self.get_logger().info(f"PGM画像サイズ: 幅={width} 高さ={height}")
-   
+    def load_yaml_parameters(self):
+        try:
+            with open(self.yaml_path, 'r') as f:
+                data = yaml.safe_load(f)
+                self.resolution = float(data.get('resolution', 0.05))
+                self.origin = data.get('origin', [0.0, 0.0, 0.0])
+                self.get_logger().info(f"YAML読み込み成功: 解像度={self.resolution}, 原点={self.origin}")
+        except Exception as e:
+            self.get_logger().error(f"YAMLファイルの読み込みに失敗しました: {e}")
+            self.resolution = 0.05
+            self.origin = [0.0, 0.0, 0.0]
 
 def main(args=None):
     rclpy.init(args=args)
