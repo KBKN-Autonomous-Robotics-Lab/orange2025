@@ -87,11 +87,8 @@ class linefilter(Node):
             hough_filename = self.save_image(hough_image, 'hough_output.pgm')
             self.log_image_size(hough_image)
             
-            dotted_cloud, solid_cloud = self.classify_lines_to_pointcloud(edge_image,step=1.0)
-            
-            
-            
-
+            dotted_cloud, solid_cloud =self.classify_lines_to_pointcloud(edge_image,step=1.0)
+          
             # 行列として表示 or 保存したい場合
             np.save(os.path.join(self.output_dir, 'dotted_lines.npy'), dotted_cloud)
             np.save(os.path.join(self.output_dir, 'solid_lines.npy'), solid_cloud)
@@ -114,6 +111,48 @@ class linefilter(Node):
 
     def detect_edges(self, image):
         return cv2.Canny(image, 50, 150)
+    def classify_lines_to_pointcloud(self, image, step=1.0):
+    # Hough変換で直線を検出する
+        lines = cv2.HoughLinesP(image, 1, np.pi / 180, threshold=50, minLineLength=30, maxLineGap=20)
+
+        dotted_points = []  # 点線として分類される点のリスト
+        solid_points = []   # 実線として分類される点のリスト
+
+        if lines is not None:
+           for line in lines:
+               x1, y1, x2, y2 = line[0]
+
+            # 線分の長さを計算
+               length = np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+
+            # 線分を一定間隔に分割する点の数を計算
+               num_points = max(int(length / step), 2)
+
+            # 線分を等間隔に分割した点の座標を生成
+               xs = np.linspace(x1, x2, num_points)
+               ys = np.linspace(y1, y2, num_points)
+
+            # 各点を地図座標（m単位）に変換して分類
+               for x, y in zip(xs, ys):
+                   map_x = x * self.resolution + self.origin[0]
+                   map_y = (image.shape[0] - y) * self.resolution + self.origin[1]
+                   map_z = 0.0
+
+                   if length < 80:
+                      dotted_points.append([map_x, map_y, map_z])
+                   else:
+                      solid_points.append([map_x, map_y, map_z])
+
+       # NumPyのfloat32型配列に変換
+        dotted_array = np.array(dotted_points, dtype=np.float32)
+        solid_array = np.array(solid_points, dtype=np.float32)
+
+       # ログ出力で確認
+        self.get_logger().info(f"点線ポイント数: {len(dotted_array)}, 直線ポイント数: {len(solid_array)}")
+        self.get_logger().info(f"点線データの一部: {dotted_array[:5]}")
+        self.get_logger().info(f"直線データの一部: {solid_array[:5]}")
+
+        return dotted_array, solid_array
 
     def detect_lines(self, image):
         lines = cv2.HoughLinesP(image, 1, np.pi / 180, threshold=50, minLineLength=30, maxLineGap=20)
@@ -129,7 +168,7 @@ class linefilter(Node):
 
                 # 点線か直線かの簡易判定
                 # 長さが短い or 急に角度が変わる場合は点線とみなす（仮定）
-                if length < 40:
+                if length < 80:
                     cv2.line(dot_image, (x1, y1), (x2, y2), 255, 1)
                 else:
                     cv2.line(solid_image, (x1, y1), (x2, y2), 255, 1)
@@ -142,41 +181,8 @@ class linefilter(Node):
         self.save_image(solid_image, 'solid_lines.pgm')
 
         return line_image
-
-
-    def classify_lines_to_pointcloud(self, image,step=1.0):
-        lines = cv2.HoughLinesP(image, 1, np.pi / 180, threshold=100, minLineLength=30, maxLineGap=20)
-
-        dotted_points = []
-        solid_points = []
         
-        line_image = np.zeros_like(image)
-        if lines is not None:
-            for line in lines:
-                x1, y1, x2, y2 = line[0]
-                length = np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
-
-                num_points = max(int(length / step), 2)
-                xs = np.linspace(x1, x2, num_points)
-                ys = np.linspace(y1, y2, num_points)
-
-                line_points = [[x, y, 0] for x, y in zip(xs, ys)]
-
-                if length < 40:
-                    dotted_points.extend(line_points)
-                else:
-                    solid_points.extend(line_points)
         
-              #  cv2.line(line_image, (x1, y1), (x2, y2), 255, 1)
-        dotted_array = np.array(dotted_points, dtype=np.float32)
-        solid_array = np.array(solid_points, dtype=np.float32)
-        
-        self.get_logger().info(f"点線ポイント数: {len(dotted_array)}, 直線ポイント数: {len(solid_array)}")
-        self.get_logger().info(f"点線データの一部: {dotted_array[:5]}")
-        self.get_logger().info(f"直線データの一部: {solid_array[:5]}")
-
-
-        return dotted_array, solid_array
         '''
 パラメータ	 数学的意味	                           画像処理的な意味
 rho=1	         ρの分解能（ピクセル単位）        距離の精度
