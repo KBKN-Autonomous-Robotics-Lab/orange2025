@@ -39,20 +39,6 @@ from std_msgs.msg import Header
 
 
 class linefilter(Node):
-    '''def __init__(self):
-        super().__init__('line_filter_node')
-
-        # 入力PGMファイルのパス（絶対パス推奨）a
-        self.input_path = '/home/ubuntu/ros2_ws/src/kbkn_maps/maps/tsukuba/whiteline/whiteline1.pgm'
-        self.output_dir = '/home/ubuntu/ros2_ws/src/kbkn_maps/maps/tsukuba/whiteline'
-        self.dotted_pub = self.create_publisher(PointCloud2, 'dotted_lines', 10)
-        self.solid_pub = self.create_publisher(PointCloud2, 'solid_lines', 10)
-        
-        os.makedirs(self.output_dir, exist_ok=True)
-
-        self.get_logger().info("Line Filter Node started.")
-        #self.check_pgm_load()
-        self.process_pgm()'''
     def __init__(self):
         super().__init__('line_filter_node')
 
