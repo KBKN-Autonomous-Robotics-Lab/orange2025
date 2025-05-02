@@ -30,6 +30,7 @@ from scipy import interpolate
 from std_msgs.msg import Float32MultiArray
 import cv2
 import subprocess
+from sensor_msgs.msg import PointCloud2
 
 
 #map save
@@ -76,6 +77,10 @@ class ReflectionIntensityMap(Node):
         self.pcd_ground_global_publisher = self.create_publisher(sensor_msgs.PointCloud2, 'pcd_ground_global', qos_profile) 
         self.reflect_map_local_publisher = self.create_publisher(OccupancyGrid, 'reflect_map_local', map_qos_profile_sub)
         self.reflect_map_global_publisher = self.create_publisher(OccupancyGrid, 'reflect_map_global', map_qos_profile_sub)
+        self.dotted_pub = self.create_publisher(PointCloud2, 'dotted_lines', 10)
+        self.solid_pub = self.create_publisher(PointCloud2, 'solid_lines', 10)
+
+        
         #パラメータ
         #odom positon init
         self.position_x = 0.0 #[m]
@@ -250,10 +255,111 @@ class ReflectionIntensityMap(Node):
         #self.reflect_map_global_publisher.publish(self.map_data_gl) 
         self.map_data_gl_flag = 1
         
+                 
+        
+        #####  takamori line filter  ######
+        self.process_pgm(map_data_set, position_x, position_y)
+        
+         
+  
         if self.MAKE_GL_MAP_FLAG == 1:
             #self.make_ref_map(position_x, position_y, theta_z)
             #self.make_ref_map(ekf_position_x, ekf_position_y, ekf_theta_z)
             self.make_ref_map(map_data_gl_set, ekf_position_x, ekf_position_y, ekf_theta_z)
+            
+    def process_pgm(self, map_data_set, position_x, position_y):
+        try:
+            image = map_data_set
+            if image is None:  
+               self.get_logger().error(f"Failed to load 'map_data_set' ")
+               return
+            self.log_image_size(image)
+            
+            binary_image = self.binarize_image(image)
+            edge_image = self.detect_edges(binary_image)
+          
+            dotted_cloud, solid_cloud = self.classify_lines_to_pointcloud(edge_image, position_x, position_y, step=1.0)
+            
+            self.publish_pointclouds(solid_cloud, dotted_cloud)
+
+        except Exception as e:
+            self.get_logger().error(f"画像処理中にエラーが発生しました: {e}")    
+            
+    def binarize_image(self, image):
+        _, binary_image = cv2.threshold(image, 90,255, cv2.THRESH_BINARY)
+        return binary_image
+
+    def detect_edges(self, image):
+        return cv2.Canny(image, 50, 150)
+    
+    def classify_lines_to_pointcloud(self, image, position_x, position_y,step=1.0):
+    # Hough変換で直線を検出する
+        lines = cv2.HoughLinesP(image, 1, np.pi / 180, threshold=50, minLineLength=30, maxLineGap=20)
+
+        dotted_points = []  # 点線として分類される点のリスト
+        solid_points = []   # 実線として分類される点のリスト
+
+        if lines is not None:
+           for line in lines:
+               x1, y1, x2, y2 = line[0]
+
+            # 線分の長さを計算
+               length = np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+
+            # 線分を一定間隔に分割する点の数を計算
+               num_points = max(int(length / step), 2)
+
+            # 線分を等間隔に分割した点の座標を生成
+               xs = np.linspace(x1, x2, num_points)
+               ys = np.linspace(y1, y2, num_points)
+
+            # 各点を地図座標（m単位）に変換して分類
+            #('resolution', 1/self.ground_pixel), 
+           #('origin', [round(position_x - self.MAP_RANGE_GL, 1), round(position_y - self.MAP_RANGE_GL, 1), round(0, 1)]) 
+               resolition = 1/self.ground_pixel
+               origin_x = round(position_x - self.MAP_RANGE_GL, 1)
+               origin_y = round(position_y - self.MAP_RANGE_GL, 1)
+               for x, y in zip(xs, ys):
+                   map_x = x * resolution + origin_x
+                   map_y = (image.shape[0] - y) * resolution + origin_y
+                   map_z = 0.0
+
+                   if length < 80:
+                      dotted_points.append([map_x, map_y, map_z])
+                   else:
+                      solid_points.append([map_x, map_y, map_z])
+
+       # NumPyのfloat32型配列に変換
+        dotted_array = np.array(dotted_points, dtype=np.float32)
+        solid_array = np.array(solid_points, dtype=np.float32)
+
+       # ログ出力で確認
+        self.get_logger().info(f"点線ポイント数: {len(dotted_array)}, 直線ポイント数: {len(solid_array)}")
+        self.get_logger().info(f"点線データの一部: {dotted_array[:5]}")
+        self.get_logger().info(f"直線データの一部: {solid_array[:5]}")
+
+        return dotted_array, solid_array
+        
+    def publish_pointclouds(self, solid_array, dotted_array):
+        fields = [
+            PointField(name='x', offset=0, datatype=PointField.FLOAT32, count=1),
+            PointField(name='y', offset=4, datatype=PointField.FLOAT32, count=1),
+            PointField(name='z', offset=8, datatype=PointField.FLOAT32, count=1),
+        ]
+
+        stamp = self.get_clock().now().to_msg()
+        
+        header = Header()
+        header.stamp = self.get_clock().now().to_msg()
+        header.frame_id = "odom"
+
+        solid_pc = pc2.create_cloud(header, fields, solid_array.tolist())
+        dotted_pc = pc2.create_cloud(header, fields, dotted_array.tolist())
+
+        self.solid_pub.publish(solid_pc)
+        self.dotted_pub.publish(dotted_pc)
+        self.get_logger().info("直線・点線の点群をパブリッシュしました")
+    
         
     def make_ref_map(self, image, position_x, position_y, theta_z):
         map_pos_diff = math.sqrt((position_x - self.map_position_x_buff)**2 + (position_y - self.map_position_y_buff)**2)

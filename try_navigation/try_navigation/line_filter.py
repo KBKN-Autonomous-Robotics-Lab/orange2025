@@ -39,6 +39,7 @@ from std_msgs.msg import Header
 
 
 class linefilter(Node):
+ 
     def __init__(self):
         super().__init__('line_filter_node')
 

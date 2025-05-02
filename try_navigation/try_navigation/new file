@@ -1,125 +1,109 @@
-import rclpy
-from rclpy.node import Node
 from sensor_msgs.msg import PointCloud2
-import numpy as np
-import cv2
-import matplotlib.pyplot as plt
 
-class PcdHeightSegmentation(Node):
-    def __init__(self):
-        super().__init__('pcd_line_filter_node')
 
-        # QoS設定
-        qos_profile = rclpy.qos.QoSProfile(
-            history=rclpy.qos.QoSHistoryPolicy.KEEP_LAST,
-            reliability=rclpy.qos.QoSReliabilityPolicy.RELIABLE,
-            durability=rclpy.qoSDurabilityPolicy.VOLATILE,
-            depth=1
-        )
 
-        # サブスクライバの作成
-        self.subscription = self.create_subscription(
-            PointCloud2,
-            '/pcd_segment_ground',
-            self.pcd_process,
-            qos_profile
-        )
+        self.dotted_pub = self.create_publisher(PointCloud2, 'dotted_lines', 10)
+        self.solid_pub = self.create_publisher(PointCloud2, 'solid_lines', 10)
 
-        # 地図解像度と原点の初期設定（例として設定）
-        self.resolution = 0.05  # 5cm/pixel
-        self.origin = [-12.5, -12.5]  # 画像中心を(0,0)に対応させるためのオフセット
+                
+        
+        #####  takamori line filter  ######
+        self.process_pgm(map_data_set, position_x, position_y)
+        
+         
+     
 
-    def pcd_process(self, msg):
-        t_stamp = msg.header.stamp
-        print(f"t_stamp = {t_stamp}")
 
-        points = self.pointcloud2_to_array(msg)
-        print(f"points = {points.shape}")
 
-        self.process_image_from_pointcloud(points)
+    def process_pgm(map_data_set, position_x, position_y):
+        try:
+            image = map_data_set
+            if image is None:  
+               self.get_logger().error(f"Failed to load 'map_data_set' ")
+               return
+            self.log_image_size(image)
+            
+            binary_image = self.binarize_image(image)
+            edge_image = self.detect_edges(binary_image)
+          
+            dotted_cloud, solid_cloud = self.classify_lines_to_pointcloud(edge_image, position_x, position_y, step=1.0)
+            
+            self.publish_pointclouds(solid_cloud, dotted_cloud)
 
-    def pointcloud2_to_array(self, cloud_msg):
-        points = np.frombuffer(cloud_msg.data, dtype=np.uint8).reshape(-1, cloud_msg.point_step)
-        x = np.frombuffer(points[:, 0:4].tobytes(), dtype=np.float32)
-        y = np.frombuffer(points[:, 4:8].tobytes(), dtype=np.float32)
-        z = np.frombuffer(points[:, 8:12].tobytes(), dtype=np.float32)
-        intensity = np.frombuffer(points[:, 12:16].tobytes(), dtype=np.float32)
-        point_cloud_matrix = np.vstack((x, y, z, intensity))
-        return point_cloud_matrix
+        except Exception as e:
+            self.get_logger().error(f"画像処理中にエラーが発生しました: {e}")    
+            
+    def binarize_image(self, image):
+        _, binary_image = cv2.threshold(image, 90,255, cv2.THRESH_BINARY)
+        return binary_image
 
-    def process_image_from_pointcloud(self, point_cloud_matrix):
-        x = point_cloud_matrix[0, :]
-        y = point_cloud_matrix[1, :]
-
-        img_size = 500
-        scale = 20.0
-        x_img = ((x * scale) + img_size // 2).astype(np.int32)
-        y_img = ((y * scale) + img_size // 2).astype(np.int32)
-
-        valid_indices = (x_img >= 0) & (x_img < img_size) & (y_img >= 0) & (y_img < img_size)
-        x_img = x_img[valid_indices]
-        y_img = y_img[valid_indices]
-
-        img = np.zeros((img_size, img_size), dtype=np.uint8)
-        img[y_img, x_img] = 255
-
-        edges = cv2.Canny(img, 50, 150)
-
-        dotted_array, solid_array = self.classify_lines_to_pointcloud(edges, step=1.0)
-
-        if len(dotted_array) > 0 or len(solid_array) > 0:
-            img_color = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-            lines = cv2.HoughLinesP(edges, 1, np.pi / 180, threshold=50, minLineLength=30, maxLineGap=20)
-            if lines is not None:
-                for line in lines:
-                    x1, y1, x2, y2 = line[0]
-                    cv2.line(img_color, (x1, y1), (x2, y2), (0, 255, 0), 1)
-            cv2.imshow("Detected Lines", img_color)
-            cv2.waitKey(1)
-        else:
-            print("No lines detected")
-
-    def classify_lines_to_pointcloud(self, image, step=1.0):
+    def detect_edges(self, image):
+        return cv2.Canny(image, 50, 150)
+    
+    def classify_lines_to_pointcloud(self, image, position_x, position_y,step=1.0):
+    # Hough変換で直線を検出する
         lines = cv2.HoughLinesP(image, 1, np.pi / 180, threshold=50, minLineLength=30, maxLineGap=20)
 
-        dotted_points = []
-        solid_points = []
+        dotted_points = []  # 点線として分類される点のリスト
+        solid_points = []   # 実線として分類される点のリスト
 
         if lines is not None:
-            for line in lines:
-                x1, y1, x2, y2 = line[0]
-                length = np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
-                num_points = max(int(length / step), 2)
-                xs = np.linspace(x1, x2, num_points)
-                ys = np.linspace(y1, y2, num_points)
+           for line in lines:
+               x1, y1, x2, y2 = line[0]
 
-                for x, y in zip(xs, ys):
-                    map_x = x * self.resolution + self.origin[0]
-                    map_y = (image.shape[0] - y) * self.resolution + self.origin[1]
-                    map_z = 0.0
+            # 線分の長さを計算
+               length = np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
 
-                    if length < 80:
-                        dotted_points.append([map_x, map_y, map_z])
-                    else:
-                        solid_points.append([map_x, map_y, map_z])
+            # 線分を一定間隔に分割する点の数を計算
+               num_points = max(int(length / step), 2)
 
+            # 線分を等間隔に分割した点の座標を生成
+               xs = np.linspace(x1, x2, num_points)
+               ys = np.linspace(y1, y2, num_points)
+
+            # 各点を地図座標（m単位）に変換して分類
+            #('resolution', 1/self.ground_pixel), 
+           #('origin', [round(position_x - self.MAP_RANGE_GL, 1), round(position_y - self.MAP_RANGE_GL, 1), round(0, 1)]) 
+               resolition = 1/self.ground_pixel
+               origin_x = round(position_x - self.MAP_RANGE_GL, 1)
+               origin_y = round(position_y - self.MAP_RANGE_GL, 1)
+               for x, y in zip(xs, ys):
+                   map_x = x * resolution + origin_x
+                   map_y = (image.shape[0] - y) * resolution + origin_y
+                   map_z = 0.0
+
+                   if length < 80:
+                      dotted_points.append([map_x, map_y, map_z])
+                   else:
+                      solid_points.append([map_x, map_y, map_z])
+
+       # NumPyのfloat32型配列に変換
         dotted_array = np.array(dotted_points, dtype=np.float32)
         solid_array = np.array(solid_points, dtype=np.float32)
 
+       # ログ出力で確認
         self.get_logger().info(f"点線ポイント数: {len(dotted_array)}, 直線ポイント数: {len(solid_array)}")
         self.get_logger().info(f"点線データの一部: {dotted_array[:5]}")
         self.get_logger().info(f"直線データの一部: {solid_array[:5]}")
 
         return dotted_array, solid_array
+        
+    def publish_pointclouds(self, solid_array, dotted_array):
+        fields = [
+            PointField(name='x', offset=0, datatype=PointField.FLOAT32, count=1),
+            PointField(name='y', offset=4, datatype=PointField.FLOAT32, count=1),
+            PointField(name='z', offset=8, datatype=PointField.FLOAT32, count=1),
+        ]
 
-def main(args=None):
-    rclpy.init(args=args)
-    node = PcdHeightSegmentation()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
-    cv2.destroyAllWindows()
+        stamp = self.get_clock().now().to_msg()
+        
+        header = Header()
+        header.stamp = self.get_clock().now().to_msg()
+        header.frame_id = "odom"
 
-if __name__ == '__main__':
-    main()
+        solid_pc = pc2.create_cloud(header, fields, solid_array.tolist())
+        dotted_pc = pc2.create_cloud(header, fields, dotted_array.tolist())
 
+        self.solid_pub.publish(solid_pc)
+        self.dotted_pub.publish(dotted_pc)
+        self.get_logger().info("直線・点線の点群をパブリッシュしました")
