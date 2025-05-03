@@ -45,7 +45,8 @@ setup(
     entry_points={
         'console_scripts': [
             'pcd_rotation = pcd_convert.pcd_rotation:main',
-            'pcd_height_segmentation = pcd_convert.pcd_height_segmentation:main'
+            'pcd_height_segmentation = pcd_convert.pcd_height_segmentation:main',
+            'pcd_merger = pcd_convert.pcd_merger:main'
         ],
     },
 )
