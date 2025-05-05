@@ -30,7 +30,9 @@ from scipy import interpolate
 from std_msgs.msg import Float32MultiArray
 import cv2
 import subprocess
-from sensor_msgs.msg import PointCloud2
+from sensor_msgs.msg import PointCloud2, PointField
+from std_msgs.msg import Header
+import sensor_msgs_py.point_cloud2 as pc2
 
 
 #map save
@@ -269,22 +271,69 @@ class ReflectionIntensityMap(Node):
             
     def process_pgm(self, map_data_set, position_x, position_y):
         try:
-            image = map_data_set
+            #self.get_logger().info("=== [11]開始 ===")
+            image, image_data = self.ref_to_image(map_data_set)
             if image is None:  
                self.get_logger().error(f"Failed to load 'map_data_set' ")
                return
-            self.log_image_size(image)
+           # self.get_logger().info("=== [12]開始 ===")
+            #self.log_image_size(image)
             
+            #self.get_logger().info("=== [13]開始 ===")
             binary_image = self.binarize_image(image)
+            #self.get_logger().info("=== [14]開始 ===")
             edge_image = self.detect_edges(binary_image)
           
+           # self.get_logger().info("=== [15]開始 ===")
             dotted_cloud, solid_cloud = self.classify_lines_to_pointcloud(edge_image, position_x, position_y, step=1.0)
             
+           # self.get_logger().info("=== [16]開始 ===")
             self.publish_pointclouds(solid_cloud, dotted_cloud)
 
         except Exception as e:
             self.get_logger().error(f"画像処理中にエラーが発生しました: {e}")    
-            
+
+    def ref_to_image(self, map_data_set):
+        """
+        map_data_set: 入力となる反射強度や確率などの2次元行列（NumPy配列）
+    
+        出力:
+            - occupancy_grid_image: OpenCV等で画像化可能な行列（uint8）
+            - occupancy_grid_data: 数値処理や分析向けの行列（float or int）
+        """
+        # 閾値の定義
+        occ_threshold_param = 0.33  # 占有空間のしきい値
+        free_threshold_param = 0.13 # 自由空間のしきい値
+
+        # 0〜1スケールと仮定し100倍する
+        occ_threshold = occ_threshold_param * 100  # = 33
+        free_threshold = free_threshold_param * 100 # = 13
+
+        # 出力配列の初期化（画像出力形式）
+        occupancy_grid_image = np.zeros_like(map_data_set, dtype=np.uint8)
+    
+        # 出力配列の初期化（元の値を保持したデータ形式）
+        occupancy_grid_data = np.zeros_like(map_data_set, dtype=np.float32)
+
+        # 処理1: 占有空間（黒: 0）
+        occupancy_grid_image[map_data_set >= occ_threshold] = 0
+        occupancy_grid_data[map_data_set >= occ_threshold] = 0.0
+
+        # 処理2: 自由空間（白: 255）
+        occupancy_grid_image[map_data_set <= free_threshold] = 255
+        occupancy_grid_data[map_data_set <= free_threshold] = 1.0
+
+        # 処理3: 未確定領域（グレー階調）
+        uncertain_mask = (map_data_set > free_threshold) & (map_data_set < occ_threshold)
+        scaled_values = 255 - (map_data_set[uncertain_mask] / occ_threshold * 100)
+        occupancy_grid_image[uncertain_mask] = scaled_values.astype(np.uint8)
+
+        # データ用（0〜1のスケーリングを保持）
+        occupancy_grid_data[uncertain_mask] = map_data_set[uncertain_mask] / occ_threshold
+
+        return occupancy_grid_image, occupancy_grid_data
+
+           
     def binarize_image(self, image):
         _, binary_image = cv2.threshold(image, 90,255, cv2.THRESH_BINARY)
         return binary_image
@@ -294,11 +343,14 @@ class ReflectionIntensityMap(Node):
     
     def classify_lines_to_pointcloud(self, image, position_x, position_y,step=1.0):
     # Hough変換で直線を検出する
+        #self.get_logger().info("=== [1]開始 ===")
         lines = cv2.HoughLinesP(image, 1, np.pi / 180, threshold=50, minLineLength=30, maxLineGap=20)
 
+        #self.get_logger().info("=== [2開始 ===")
         dotted_points = []  # 点線として分類される点のリスト
         solid_points = []   # 実線として分類される点のリスト
-
+        
+        #self.get_logger().info("=== [3]開始 ===")
         if lines is not None:
            for line in lines:
                x1, y1, x2, y2 = line[0]
@@ -312,13 +364,14 @@ class ReflectionIntensityMap(Node):
             # 線分を等間隔に分割した点の座標を生成
                xs = np.linspace(x1, x2, num_points)
                ys = np.linspace(y1, y2, num_points)
-
+              # self.get_logger().info("=== [4]開始 ===")
             # 各点を地図座標（m単位）に変換して分類
             #('resolution', 1/self.ground_pixel), 
-           #('origin', [round(position_x - self.MAP_RANGE_GL, 1), round(position_y - self.MAP_RANGE_GL, 1), round(0, 1)]) 
-               resolition = 1/self.ground_pixel
+            #('origin', [round(position_x - self.MAP_RANGE_GL, 1), round(position_y - self.MAP_RANGE_GL, 1), round(0, 1)]) 
+               resolution = 1/self.ground_pixel
                origin_x = round(position_x - self.MAP_RANGE_GL, 1)
                origin_y = round(position_y - self.MAP_RANGE_GL, 1)
+              # self.get_logger().info("=== [5]開始 ===")
                for x, y in zip(xs, ys):
                    map_x = x * resolution + origin_x
                    map_y = (image.shape[0] - y) * resolution + origin_y
@@ -328,12 +381,12 @@ class ReflectionIntensityMap(Node):
                       dotted_points.append([map_x, map_y, map_z])
                    else:
                       solid_points.append([map_x, map_y, map_z])
-
-       # NumPyのfloat32型配列に変換
+        #self.get_logger().info("=== [6]開始 ===")
+        # NumPyのfloat32型配列に変換
         dotted_array = np.array(dotted_points, dtype=np.float32)
         solid_array = np.array(solid_points, dtype=np.float32)
-
-       # ログ出力で確認
+       #self.get_logger().info("=== [7]開始 ===")
+        # ログ出力で確認
         self.get_logger().info(f"点線ポイント数: {len(dotted_array)}, 直線ポイント数: {len(solid_array)}")
         self.get_logger().info(f"点線データの一部: {dotted_array[:5]}")
         self.get_logger().info(f"直線データの一部: {solid_array[:5]}")
@@ -341,21 +394,24 @@ class ReflectionIntensityMap(Node):
         return dotted_array, solid_array
         
     def publish_pointclouds(self, solid_array, dotted_array):
+        self.get_logger().info("=== [1]開始 ===")
         fields = [
             PointField(name='x', offset=0, datatype=PointField.FLOAT32, count=1),
             PointField(name='y', offset=4, datatype=PointField.FLOAT32, count=1),
             PointField(name='z', offset=8, datatype=PointField.FLOAT32, count=1),
         ]
 
+        self.get_logger().info("=== [2]開始 ===")
         stamp = self.get_clock().now().to_msg()
         
         header = Header()
         header.stamp = self.get_clock().now().to_msg()
         header.frame_id = "odom"
-
+        
+        self.get_logger().info("=== [3]開始 ===")
         solid_pc = pc2.create_cloud(header, fields, solid_array.tolist())
         dotted_pc = pc2.create_cloud(header, fields, dotted_array.tolist())
-
+        self.get_logger().info("=== [4]開始 ===")
         self.solid_pub.publish(solid_pc)
         self.dotted_pub.publish(dotted_pc)
         self.get_logger().info("直線・点線の点群をパブリッシュしました")
