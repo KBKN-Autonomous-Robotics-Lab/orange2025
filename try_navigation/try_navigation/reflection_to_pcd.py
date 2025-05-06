@@ -82,7 +82,8 @@ class ReflectionIntensityMap(Node):
         self.dotted_pub = self.create_publisher(PointCloud2, 'dotted_lines', 10)
         self.solid_pub = self.create_publisher(PointCloud2, 'solid_lines', 10)
 
-        
+        self.image_saved = False  # 画像保存フラグ（初回のみ保存する）
+
         #パラメータ
         #odom positon init
         self.position_x = 0.0 #[m]
@@ -260,7 +261,7 @@ class ReflectionIntensityMap(Node):
                  
         
         #####  takamori line filter  ######
-        self.process_pgm(map_data_set, position_x, position_y)
+        self.process_pgm(map_data_gl_set, position_x, position_y)
         
          
   
@@ -289,6 +290,18 @@ class ReflectionIntensityMap(Node):
             
            # self.get_logger().info("=== [16]開始 ===")
             self.publish_pointclouds(solid_cloud, dotted_cloud)
+            # 画像を1回だけ保存（デバッグ用）
+            if not self.image_saved:
+               save_dir = "/home/ubuntu/ros2_ws/src/kbkn_maps/maps/tsukuba/whiteline"
+               os.makedirs(save_dir, exist_ok=True)
+
+               cv2.imwrite(os.path.join(save_dir, "00_map_data_set.png"), map_data_set)
+               cv2.imwrite(os.path.join(save_dir, "01_occupancy_grid_image.png"), image)
+               cv2.imwrite(os.path.join(save_dir, "02_binary_image.png"), binary_image)
+               cv2.imwrite(os.path.join(save_dir, "03_edge_image.png"), edge_image)
+               self.image_saved = True
+               self.get_logger().info("中間画像を保存しました")
+
 
         except Exception as e:
             self.get_logger().error(f"画像処理中にエラーが発生しました: {e}")    
@@ -302,11 +315,11 @@ class ReflectionIntensityMap(Node):
             - occupancy_grid_data: 数値処理や分析向けの行列（float or int）
         """
         # 閾値の定義
-        occ_threshold_param = 0.33  # 占有空間のしきい値
-        free_threshold_param = 0.13 # 自由空間のしきい値
+        occ_threshold_param = 0.15  # 占有空間のしきい値
+        free_threshold_param = 0.05 # 自由空間のしきい値
 
         # 0〜1スケールと仮定し100倍する
-        occ_threshold = occ_threshold_param * 100  # = 33
+        occ_threshold = occ_threshold_param * 100  # = 
         free_threshold = free_threshold_param * 100 # = 13
 
         # 出力配列の初期化（画像出力形式）
@@ -344,7 +357,7 @@ class ReflectionIntensityMap(Node):
     def classify_lines_to_pointcloud(self, image, position_x, position_y,step=1.0):
     # Hough変換で直線を検出する
         #self.get_logger().info("=== [1]開始 ===")
-        lines = cv2.HoughLinesP(image, 1, np.pi / 180, threshold=50, minLineLength=30, maxLineGap=20)
+        lines = cv2.HoughLinesP(image, 1, np.pi / 180, threshold=30, minLineLength=40, maxLineGap=20)
 
         #self.get_logger().info("=== [2開始 ===")
         dotted_points = []  # 点線として分類される点のリスト
