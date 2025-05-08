@@ -63,6 +63,9 @@ class GPSData(Node):
         self.is_acquiring = False
     
     def timer_callback(self):
+        if not self.initialized:
+            # 初期化が完了していないので何もしない
+            return    
         self.gps_data_cache = self.get_gps_quat(self.dev_name, self.country_id)
 
         if self.gps_data_cache:
@@ -381,9 +384,7 @@ class GPSData(Node):
 
             
     def publish_odom(self, lat, lon, alt):
-        if not self.initialized:
-            # 初期化が完了していないので何もしない
-            return    
+        
         #GPS_data = self.get_gps_quat(self.dev_name, self.country_id)
         #gnggadata = (Fixtype_data,latitude_data,longitude_data,altitude_data,satelitecount_data,heading)
         #if GPS_data and GPS_data[1] != 0 and GPS_data[2] != 0:
