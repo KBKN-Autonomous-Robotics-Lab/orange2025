@@ -33,6 +33,8 @@ import subprocess
 from sensor_msgs.msg import PointCloud2, PointField
 from std_msgs.msg import Header
 import sensor_msgs_py.point_cloud2 as pc2
+from sensor_msgs.msg import Image
+from cv_bridge import CvBridge
 
 
 #map save
@@ -69,8 +71,8 @@ class ReflectionIntensityMap(Node):
         )
         # Subscriptionを作成。CustomMsg型,'/livox/lidar'という名前のtopicをsubscribe。
         self.subscription = self.create_subscription(sensor_msgs.PointCloud2, '/pcd_segment_ground', self.reflect_map, qos_profile)
-        self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom_wheel', self.get_odom, qos_profile_sub)
-        self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom_wheel', self.get_ekf_odom, qos_profile_sub)
+        self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom', self.get_odom, qos_profile_sub)
+        self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom', self.get_ekf_odom, qos_profile_sub)
         #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom_fast', self.get_odom, qos_profile_sub)
         self.subscription  # 警告を回避するために設置されているだけです。削除しても挙動はかわりません。
         self.timer = self.create_timer(0.1, self.timer_callback)
@@ -81,6 +83,14 @@ class ReflectionIntensityMap(Node):
         self.reflect_map_global_publisher = self.create_publisher(OccupancyGrid, 'reflect_map_global', map_qos_profile_sub)
         self.dotted_pub = self.create_publisher(PointCloud2, 'dotted_lines', 10)
         self.solid_pub = self.create_publisher(PointCloud2, 'solid_lines', 10)
+        self.solid_pub_buff = self.create_publisher(PointCloud2, 'solid_lines_buff', 10)
+        self.publisher_map = self.create_publisher(Image, 'image_map', 10)
+        self.publisher_binary = self.create_publisher(Image, 'image_binary', 10)
+        self.publisher_oc = self.create_publisher(Image, 'image_oc', 10)
+        self.publisher_edge = self.create_publisher(Image, 'image_edge', 10)
+        #self.publisher_hough = self.create_publisher(Image, 'image_hough', 10)
+        self.bridge = CvBridge()
+
 
         self.image_saved = False  # 画像保存フラグ（初回のみ保存する）
 
@@ -102,6 +112,7 @@ class ReflectionIntensityMap(Node):
         
         #mid360 buff
         self.pcd_ground_buff = np.array([[],[],[],[]]);
+        self.solid_array_buff = np.array([[],[],[]]);
         
         #ground 
         self.ground_pixel = 1000/50#障害物のグリッドサイズ設定
@@ -262,6 +273,7 @@ class ReflectionIntensityMap(Node):
         
         #####  takamori line filter  ######
         self.process_pgm(map_data_gl_set, position_x, position_y)
+        #self.process_pgm(map_data_set, position_x, position_y)
         
          
   
@@ -283,18 +295,49 @@ class ReflectionIntensityMap(Node):
             #self.get_logger().info("=== [13]開始 ===")
             binary_image = self.binarize_image(image)
             #self.get_logger().info("=== [14]開始 ===")
-            edge_image = self.detect_edges(binary_image)
+            
+            # カーネル定義（必要に応じて調整）
+            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
+
+            # Open → Close
+            opened = cv2.morphologyEx(binary_image, cv2.MORPH_OPEN, kernel)
+            open_close = cv2.morphologyEx(opened, cv2.MORPH_CLOSE, kernel)
+
+            # ↑この結果に対して Close → Open
+            closed_then = cv2.morphologyEx(open_close, cv2.MORPH_CLOSE, kernel)
+            oc_image = cv2.morphologyEx(closed_then, cv2.MORPH_OPEN, kernel)     
+                   
+            edge_image = self.detect_edges(oc_image)
           
            # self.get_logger().info("=== [15]開始 ===")
             dotted_cloud, solid_cloud = self.classify_lines_to_pointcloud(edge_image, position_x, position_y, step=1.0)
             
-           # self.get_logger().info("=== [16]開始 ===")
+        
+            
             self.publish_pointclouds(solid_cloud, dotted_cloud)
+            #self.publish_pointclouds(self.solid_array_buff, dotted_cloud)
+            #self.get_logger().info("=== [16]開始 ===")
+            # 元行列
+
+            map_data_set_image_msg = self.bridge.cv2_to_imgmsg(map_data_set, encoding='mono8')
+            self.publisher_map.publish(map_data_set_image_msg)
+            # 二値化行列
+            binary_image_msg = self.bridge.cv2_to_imgmsg(binary_image, encoding='mono8')
+            self.publisher_binary.publish(binary_image_msg)
+            # OC行列
+            oc_image_msg = self.bridge.cv2_to_imgmsg(oc_image, encoding='mono8')
+            self.publisher_oc.publish(oc_image_msg)
+            # エッジ行列   
+            edge_image_msg = self.bridge.cv2_to_imgmsg(edge_image, encoding='mono8')
+            self.publisher_edge.publish(edge_image_msg)
+            
+            self.get_logger().info("=== [5]開始 ===")
             # 画像を1回だけ保存（デバッグ用）
             if not self.image_saved:
                save_dir = "/home/ubuntu/ros2_ws/src/kbkn_maps/maps/tsukuba/whiteline"
                os.makedirs(save_dir, exist_ok=True)
-
+               
+               #self.publisher_hough.publish(dotted_pc)
                cv2.imwrite(os.path.join(save_dir, "00_map_data_set.png"), map_data_set)
                cv2.imwrite(os.path.join(save_dir, "01_occupancy_grid_image.png"), image)
                cv2.imwrite(os.path.join(save_dir, "02_binary_image.png"), binary_image)
@@ -348,16 +391,18 @@ class ReflectionIntensityMap(Node):
 
            
     def binarize_image(self, image):
-        _, binary_image = cv2.threshold(image, 90,255, cv2.THRESH_BINARY)
+        _, binary_image = cv2.threshold(image, 90,255, cv2.THRESH_BINARY)# 90 255
         return binary_image
 
     def detect_edges(self, image):
-        return cv2.Canny(image, 50, 150)
+        return cv2.Canny(image, 50, 150)#50 150
     
     def classify_lines_to_pointcloud(self, image, position_x, position_y,step=1.0):
     # Hough変換で直線を検出する
         #self.get_logger().info("=== [1]開始 ===")
-        lines = cv2.HoughLinesP(image, 1, np.pi / 180, threshold=30, minLineLength=40, maxLineGap=20)
+        #lines = cv2.HoughLinesP(image, 1, np.pi / 180, threshold=50, minLineLength=40, maxLineGap=20)
+        #lines = cv2.HoughLinesP(image, 1, np.pi / 180, threshold=30, minLineLength=20, maxLineGap=30) #No1 2025.5.8
+        lines = cv2.HoughLinesP(image, 1, np.pi / 180, threshold=30, minLineLength=10, maxLineGap=30) #
 
         #self.get_logger().info("=== [2開始 ===")
         dotted_points = []  # 点線として分類される点のリスト
@@ -382,8 +427,8 @@ class ReflectionIntensityMap(Node):
             #('resolution', 1/self.ground_pixel), 
             #('origin', [round(position_x - self.MAP_RANGE_GL, 1), round(position_y - self.MAP_RANGE_GL, 1), round(0, 1)]) 
                resolution = 1/self.ground_pixel
-               origin_x = round(position_x - self.MAP_RANGE_GL, 1)
-               origin_y = round(position_y - self.MAP_RANGE_GL, 1)
+               origin_x = round(position_x - self.MAP_RANGE_GL-0.3, 1)
+               origin_y = round(position_y - self.MAP_RANGE_GL+0.15, 1)
               # self.get_logger().info("=== [5]開始 ===")
                for x, y in zip(xs, ys):
                    map_x = x * resolution + origin_x
@@ -398,6 +443,16 @@ class ReflectionIntensityMap(Node):
         # NumPyのfloat32型配列に変換
         dotted_array = np.array(dotted_points, dtype=np.float32)
         solid_array = np.array(solid_points, dtype=np.float32)
+        
+        #solid_array_buff
+        #if len(solid_array[0,:]) > 3:
+        #    solid_array_buff = np.insert(self.solid_array_buff, len(self.solid_array_buff[0,:]), solid_array.T, axis=1)
+        #else:
+        #    solid_array_buff = self.solid_array_buff
+        #points_round = np.round(solid_array_buff * self.ground_pixel) / self.ground_pixel
+        #self.solid_array_buff =points_round[:,~pd.DataFrame({"x":points_round[0,:], "y":points_round[1,:], "z":points_round[2,:]}).duplicated()]
+        
+        
        #self.get_logger().info("=== [7]開始 ===")
         # ログ出力で確認
         self.get_logger().info(f"点線ポイント数: {len(dotted_array)}, 直線ポイント数: {len(solid_array)}")
