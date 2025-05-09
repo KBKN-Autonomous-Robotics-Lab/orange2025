@@ -29,7 +29,7 @@ class GPSData(Node):
         self.Position_magnification = self.get_parameter('Position_magnification').get_parameter_value().double_value
         self.theta = self.get_parameter('heading').get_parameter_value().double_value
         
-        self.theta = 275.6 # tukuba param
+        #self.theta = 275.6 # tukuba param
         #self.theta = 180 #nakaniwa param
         self.initial_coordinate = None
         self.fix_data = None
@@ -73,6 +73,7 @@ class GPSData(Node):
         request = Avglatlon.Request()
         request.avg_lat = self.initial_coordinate[0]  # ← average lat
         request.avg_lon = self.initial_coordinate[1]  # ← average lon
+        request.theta = self.theta
 
         future = self.client.call_async(request)
         future.add_done_callback(self.response_callback)
@@ -337,10 +338,10 @@ class GPSData(Node):
         r_theta = theta * degree_to_radian
         h_x = math.cos(r_theta) * gps_x - math.sin(r_theta) * gps_y
         h_y = math.sin(r_theta) * gps_x + math.cos(r_theta) * gps_y
-        point = (-h_x, -h_y)
+        #point = (-h_x, -h_y)
         #point = (-h_x, h_y)
         #point = (h_x, -h_y)
-        #point = (-h_y, h_x)
+        point = (-h_y, h_x)
         #point = (h_y, -h_x)
 
         return point
