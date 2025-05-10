@@ -32,8 +32,8 @@ setup(
             "get_lonlat_ttyACM = orange_gnss.get_lonlat_ttyACM:main",
             "get_lonlat_ttyUSB = orange_gnss.get_lonlat_ttyUSB:main",
             "get_movingbase_quat_ttyUSB = orange_gnss.get_movingbase_quat_ttyUSB:main",
-            "get_lonlat_movingbase_quat_ttyUSB = orange_gnss.get_lonlat_movingbase_quat_ttyUSB:main",
-            "get_lonlat_quat_ttyUSB = orange_gnss.get_lonlat_quat_ttyUSB:main",
+            "gnss_odom_movingbase_fix_publisher_ttyUSB = orange_gnss.gnss_odom_movingbase_fix_publisher_ttyUSB:main",
+            "gnss_odom_publisher_ttyUSB = orange_gnss.gnss_odom_publisher_ttyUSB:main",
             "GPSodom_correction = orange_gnss.GPSodom_correction:main",
             "lonlat_to_odom = orange_gnss.lonlat_to_odom:main",
             "ekf_myself_noGPS = orange_gnss.ekf_myself_noGPS:main"

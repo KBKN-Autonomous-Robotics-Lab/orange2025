@@ -9,6 +9,7 @@ from sensor_msgs.msg import NavSatFix, NavSatStatus
 from std_msgs.msg import Header
 import threading
 import time
+from my_msgs.srv import Avglatlon
 
 class GPSData(Node):
     def __init__(self):
@@ -38,6 +39,11 @@ class GPSData(Node):
         
         self.initialized = False  # 平均初期座標が取得できたかどうか
         self.timer = self.create_timer(1.0, self.publish_GPS_lonlat_quat)
+        
+        # service client
+        self.client = self.create_client(Avglatlon, 'send_avg_gps')
+        while not self.client.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info("service not available...")
 
         self.get_logger().info("Start get_lonlat quat node")
         self.get_logger().info("-------------------------")
@@ -51,6 +57,27 @@ class GPSData(Node):
         self.gps_acquisition_thread = None
         self.is_acquiring = False
 
+    # service client
+    def send_request(self):
+        request = Avglatlon.Request()
+        request.avg_lat = self.initial_coordinate[0]  # ← average lat
+        request.avg_lon = self.initial_coordinate[1]  # ← average lon
+        request.theta = self.theta
+
+        future = self.client.call_async(request)
+        future.add_done_callback(self.response_callback)
+        
+    def response_callback(self, future):
+        try:
+            response = future.result()
+            if response.success:
+                self.get_logger().info('サービス送信成功')
+            else:
+                self.get_logger().warn('サービスは受け取られましたが、処理は失敗しました')
+        except Exception as e:
+            self.get_logger().error(f'サービス呼び出し失敗: {e}')
+    
+    # gps data collect
     def start_gps_acquisition(self):
         if not self.is_acquiring:
             self.is_acquiring = True
@@ -75,6 +102,7 @@ class GPSData(Node):
             self.initial_coordinate = [lat_sum / count, lon_sum / count]
             self.initialized = True
             self.get_logger().info(f"Initial coordinate set to: {self.initial_coordinate}")
+            self.send_request()
         self.is_acquiring = False
 
     def get_gps_quat(self, dev_name, country_id):
