@@ -12,9 +12,12 @@ find_package(rclcpp_action REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
 find_package(laser_geometry REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
 find_package(pcl_ros REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(PCL REQUIRED)
@@ -58,6 +61,22 @@ ament_target_dependencies(led_node rclcpp std_msgs serial)
 
 # Install cpp executable
 install(TARGETS led_node
+  DESTINATION lib/${PROJECT_NAME})
+
+# Create cpp executable
+add_executable(wheel_imu_odom src/wheel_imu_odom.cpp)
+ament_target_dependencies(wheel_imu_odom
+  rclcpp
+  sensor_msgs
+  nav_msgs
+  geometry_msgs
+  tf2
+  tf2_ros
+  tf2_geometry_msgs
+)
+
+# Install cpp executable
+install(TARGETS wheel_imu_odom
   DESTINATION lib/${PROJECT_NAME})
 
 # install
