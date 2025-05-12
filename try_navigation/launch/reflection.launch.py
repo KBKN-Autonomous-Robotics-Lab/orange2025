@@ -104,12 +104,12 @@ def generate_launch_description():
         #),
         
         #reflection intensity map
-        Node(package='try_navigation',
-            executable='reflection_intensity_map',
-            name='reflection_intensity_map_node',
-            output='screen',
-            arguments=[],
-        ),
+        #Node(package='try_navigation',
+         #   executable='reflection_intensity_map',
+         #   name='reflection_intensity_map_node',
+         #   output='screen',
+         #   arguments=[],
+        #),
         #path planning
         #Node(package='try_navigation',
         #    executable='potential_astar',

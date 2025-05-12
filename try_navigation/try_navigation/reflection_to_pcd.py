@@ -84,9 +84,12 @@ class ReflectionIntensityMap(Node):
         self.dotted_pub = self.create_publisher(PointCloud2, 'dotted_lines', 10)
         self.solid_pub = self.create_publisher(PointCloud2, 'solid_lines', 10)
         self.solid_pub_buff = self.create_publisher(PointCloud2, 'solid_lines_buff', 10)
+        self.white_line = self.create_publisher(PointCloud2, 'white_lines', 10)
+  
         self.publisher_map = self.create_publisher(Image, 'image_map', 10)
         self.publisher_binary = self.create_publisher(Image, 'image_binary', 10)
         self.publisher_oc = self.create_publisher(Image, 'image_oc', 10)
+        self.publisher_filtered = self.create_publisher(Image, 'image_filtered', 10)
         self.publisher_edge = self.create_publisher(Image, 'image_edge', 10)
         #self.publisher_hough = self.create_publisher(Image, 'image_hough', 10)
         self.bridge = CvBridge()
@@ -112,17 +115,17 @@ class ReflectionIntensityMap(Node):
         
         #mid360 buff
         self.pcd_ground_buff = np.array([[],[],[],[]]);
-        self.solid_array_buff = np.array([[],[],[]]);
+        #self.solid_array_buff = np.array([[],[],[]]);
         
         #ground 
         self.ground_pixel = 1000/50#障害物のグリッドサイズ設定
-        self.MAP_RANGE = 15.0 #[m]
+        self.MAP_RANGE = 7.0 #[m]15 5
         
-        self.MAP_RANGE_GL = 20.0 #[m]
-        self.MAP_LIM_X_MIN = -25.0 #[m]
-        self.MAP_LIM_X_MAX =  25.0 #[m]
-        self.MAP_LIM_Y_MIN = -25.0 #[m]
-        self.MAP_LIM_Y_MAX =  25.0 #[m]
+        self.MAP_RANGE_GL = 7 #[m] 20 5 
+        self.MAP_LIM_X_MIN = -7.0 #[m]-25 5 
+        self.MAP_LIM_X_MAX =  7.0 #[m]25 5
+        self.MAP_LIM_Y_MIN = -7.0 #[m]-25 5 
+        self.MAP_LIM_Y_MAX =  7.0 #[m]25 5
         
         #map position
         self.map_position_x_buff = 0.0 #[m]
@@ -271,7 +274,7 @@ class ReflectionIntensityMap(Node):
         
                  
         
-        #####  takamori line filter  ######
+        ##############################  takamori line filter  #################################
         self.process_pgm(map_data_gl_set, position_x, position_y)
         #self.process_pgm(map_data_set, position_x, position_y)
         
@@ -297,22 +300,45 @@ class ReflectionIntensityMap(Node):
             #self.get_logger().info("=== [14]開始 ===")
             
             # カーネル定義（必要に応じて調整）
-            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
+            kernel_open = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))  #33 22 line got bigger but foot print and some noise left
+            kernel_close = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2)) ##22 22 might be best so far 
 
             # Open → Close
-            opened = cv2.morphologyEx(binary_image, cv2.MORPH_OPEN, kernel)
-            open_close = cv2.morphologyEx(opened, cv2.MORPH_CLOSE, kernel)
+            opened = cv2.morphologyEx(binary_image, cv2.MORPH_OPEN, kernel_open)
+            open_close = cv2.morphologyEx(opened, cv2.MORPH_CLOSE, kernel_close)
 
             # ↑この結果に対して Close → Open
-            closed_then = cv2.morphologyEx(open_close, cv2.MORPH_CLOSE, kernel)
-            oc_image = cv2.morphologyEx(closed_then, cv2.MORPH_OPEN, kernel)     
-                   
+            closed_then = cv2.morphologyEx(open_close, cv2.MORPH_CLOSE, kernel_close)
+            oc_image = cv2.morphologyEx(closed_then, cv2.MORPH_OPEN, kernel_open)    
+             
+             
+            _, oc_image = cv2.threshold(oc_image, 127,255, cv2.THRESH_BINARY)
+            # === ここで連結成分分析を適用 ===
+            num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(oc_image)
+
+            # 出力画像の初期化（黒）
+            filtered_image = np.zeros_like(oc_image)
+            
+            # 面積でフィルタ（線を残し、大きな塊や小ノイズを除去）
+            #for i in range(1, num_labels):  # 0番は背景なので無視
+            #    area = stats[i, cv2.CC_STAT_AREA]
+                #w = stats[i, cv2.CC_STAT_WIDTH]
+                #h = stats[i, cv2.CC_STAT_HEIGHT]
+
+                #aspect_ratio = w / h if h != 0 else 0
+
+                # 細長くて一定以上の面積があるものだけ残す（調整可）
+                #if 50 < area < 10000 and (aspect_ratio < 0.2 or aspect_ratio > 5):  # 縦長/横長OK
+             #   if 1 < area < 50000 :#and (aspect_ratio < 0.2 or aspect_ratio > 5):  # 縦長/横長OK
+              #      filtered_image[labels == i] = 255  # 該当ラベルを白に
+            
+            
             edge_image = self.detect_edges(oc_image)
           
            # self.get_logger().info("=== [15]開始 ===")
             dotted_cloud, solid_cloud = self.classify_lines_to_pointcloud(edge_image, position_x, position_y, step=1.0)
             
-        
+            self.image_to_pcd(edge_image, position_x, position_y, step=1.0)
             
             self.publish_pointclouds(solid_cloud, dotted_cloud)
             #self.publish_pointclouds(self.solid_array_buff, dotted_cloud)
@@ -327,23 +353,29 @@ class ReflectionIntensityMap(Node):
             # OC行列
             oc_image_msg = self.bridge.cv2_to_imgmsg(oc_image, encoding='mono8')
             self.publisher_oc.publish(oc_image_msg)
+            
+            # filtered=image  connected components analysis
+            filtered_image_msg = self.bridge.cv2_to_imgmsg(filtered_image, encoding='mono8')
+            self.publisher_filtered.publish(filtered_image_msg)
+            
+            
             # エッジ行列   
             edge_image_msg = self.bridge.cv2_to_imgmsg(edge_image, encoding='mono8')
             self.publisher_edge.publish(edge_image_msg)
             
-            self.get_logger().info("=== [5]開始 ===")
+            #self.get_logger().info("=== [5]開始 ===")
             # 画像を1回だけ保存（デバッグ用）
-            if not self.image_saved:
-               save_dir = "/home/ubuntu/ros2_ws/src/kbkn_maps/maps/tsukuba/whiteline"
-               os.makedirs(save_dir, exist_ok=True)
+           # if not self.image_saved:
+            #   save_dir = "/home/ubuntu/ros2_ws/src/kbkn_maps/maps/tsukuba/whiteline"
+             #  os.makedirs(save_dir, exist_ok=True)
                
                #self.publisher_hough.publish(dotted_pc)
-               cv2.imwrite(os.path.join(save_dir, "00_map_data_set.png"), map_data_set)
-               cv2.imwrite(os.path.join(save_dir, "01_occupancy_grid_image.png"), image)
-               cv2.imwrite(os.path.join(save_dir, "02_binary_image.png"), binary_image)
-               cv2.imwrite(os.path.join(save_dir, "03_edge_image.png"), edge_image)
-               self.image_saved = True
-               self.get_logger().info("中間画像を保存しました")
+               #cv2.imwrite(os.path.join(save_dir, "00_map_data_set.png"), map_data_set)
+               #cv2.imwrite(os.path.join(save_dir, "01_occupancy_grid_image.png"), image)
+               #cv2.imwrite(os.path.join(save_dir, "02_binary_image.png"), binary_image)
+               #cv2.imwrite(os.path.join(save_dir, "03_edge_image.png"), edge_image)
+              # self.image_saved = True
+               #self.get_logger().info("中間画像を保存しました")
 
 
         except Exception as e:
@@ -396,6 +428,46 @@ class ReflectionIntensityMap(Node):
 
     def detect_edges(self, image):
         return cv2.Canny(image, 50, 150)#50 150
+        
+    def image_to_pcd(self, image, position_x, position_y, step=1.0):
+        # ---- パラメータ定義 ----
+        resolution = 1 / self.ground_pixel  # [m/pixel]
+        origin_x = round(position_x - self.MAP_RANGE_GL + 0, 1)
+        origin_y = round(position_y - self.MAP_RANGE_GL + 14, 1)
+
+        # ---- 障害物画素の抽出 ----
+        #image_norm = cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+        #obstacle_indices = np.where(image_norm > 0)  # 非ゼロ画素（障害物）
+        obstacle_indices = np.where(image > 128)
+        if len(obstacle_indices[0]) == 0:
+            return  # 障害物がなければ処理しない
+
+        # ---- ピクセル座標 → 実空間座標変換 ----
+        obs_x = obstacle_indices[1] * resolution + origin_x  # 列方向 → X
+        obs_y = -obstacle_indices[0] * resolution + origin_y # 行方向（反転）→ Y
+        obs_z = np.zeros_like(obs_x, dtype=np.float32)       # Z軸は平面上なので0
+        #obs_intensity = image_norm[obstacle_indices].astype(np.float32)  # 画素値を強度として使う
+        obs_intensity = image[obstacle_indices].astype(np.float32)
+        # ---- 点群作成 [X, Y, Z, Intensity] ----
+        obs_matrix = np.vstack((obs_x, obs_y, obs_z, obs_intensity))
+        points = obs_matrix.T  # shape: (N, 4)
+        # ---- PointCloud2 メッセージ作成 ----
+        header = Header()
+        header.stamp = self.get_clock().now().to_msg()
+        header.frame_id = "odom"
+        
+        fields = [
+        PointField(name='x', offset=0,  datatype=PointField.FLOAT32, count=1),
+        PointField(name='y', offset=4,  datatype=PointField.FLOAT32, count=1),
+        PointField(name='z', offset=8,  datatype=PointField.FLOAT32, count=1),
+        PointField(name='intensity', offset=12, datatype=PointField.FLOAT32, count=1),
+        ]
+
+        pc_msg = pc2.create_cloud(header,fields,points)
+
+        # ---- パブリッシュ ----
+        self.white_line.publish(pc_msg)   
+    
     
     def classify_lines_to_pointcloud(self, image, position_x, position_y,step=1.0):
     # Hough変換で直線を検出する
@@ -460,6 +532,7 @@ class ReflectionIntensityMap(Node):
         self.get_logger().info(f"直線データの一部: {solid_array[:5]}")
 
         return dotted_array, solid_array
+        
         
     def publish_pointclouds(self, solid_array, dotted_array):
         self.get_logger().info("=== [1]開始 ===")
