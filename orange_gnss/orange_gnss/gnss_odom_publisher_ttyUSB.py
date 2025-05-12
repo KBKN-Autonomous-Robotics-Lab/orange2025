@@ -87,19 +87,25 @@ class GPSData(Node):
     def acquire_gps_data(self):
         lat_sum = 0.0
         lon_sum = 0.0
+        heading_sum = 0.0
         count = 0
+        serial_port = serial.Serial(self.dev_name, self.serial_baud)
+        line = serial_port.readline()
 
         start_time = time.time()
         while time.time() - start_time < 10:  # 10 seconds
             GPS_data = self.get_gps_quat(self.dev_name, self.country_id)
+            gps_data = line.split(b",")
             if GPS_data and GPS_data[1] != 0 and GPS_data[2] != 0:
                 lat_sum += GPS_data[1]
                 lon_sum += GPS_data[2]
+                heading_sum += float(gps_data[1])
                 count += 1
             time.sleep(0.1)  # Slight delay to avoid overwhelming the GPS device
 
         if count > 0:
             self.initial_coordinate = [lat_sum / count, lon_sum / count]
+            self.theta = (heading_sum / count) + 90
             self.initialized = True
             self.get_logger().info(f"Initial coordinate set to: {self.initial_coordinate}")
             self.send_request()
