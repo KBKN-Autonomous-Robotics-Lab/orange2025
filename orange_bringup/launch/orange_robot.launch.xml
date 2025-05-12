@@ -80,7 +80,7 @@
   <!-- GPSposition_publisher -->
   <!-- initial heading:housei nakaniwa=179.169287 tsukuba= 276.5 -->
   <!-- GPSheading_publisher -->
-  <node pkg="orange_gnss" exec="get_lonlat_movingbase_quat_ttyUSB" output="screen">
+  <node pkg="orange_gnss" exec="gnss_odom_publisher_ttyUSB" output="screen">
     <param name="port" value="/dev/sensors/GNSS_UM982"/>
     <param name="baud" value="115200"/>
     <param name="country_id" value="0"/>

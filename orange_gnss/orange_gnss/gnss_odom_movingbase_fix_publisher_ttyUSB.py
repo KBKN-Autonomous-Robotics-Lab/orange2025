@@ -2,11 +2,15 @@
 import math
 import rclpy
 import serial
+import tkinter as tk
 from rclpy.node import Node
 from sensor_msgs.msg import Imu, NavSatFix, NavSatStatus
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Header
 from geometry_msgs.msg import Quaternion, Pose, Point, Twist, Vector3
+import threading
+import time
+from my_msgs.srv import Avglatlon
 
 class GPSData(Node):
     def __init__(self):
@@ -25,11 +29,12 @@ class GPSData(Node):
         self.Position_magnification = self.get_parameter('Position_magnification').get_parameter_value().double_value
         self.theta = self.get_parameter('heading').get_parameter_value().double_value
         
-        self.theta = 275.6 # tukuba param
+        #self.theta = 275.6 # tukuba param
         #self.theta = 180 #nakaniwa param
         self.initial_coordinate = None
         self.fix_data = None
         self.count = 0
+        self.initialized = False  # 平均初期座標が取得できたかどうか
 
         # Publishers
         self.lonlat_pub = self.create_publisher(NavSatFix, '/fix', 1)
@@ -38,6 +43,11 @@ class GPSData(Node):
         self.movingbase_msg = Imu()
         self.odom_pub = self.create_publisher(Odometry, '/odom/UM982', 10)
         self.odom_msg = Odometry()
+        
+        # service client
+        self.client = self.create_client(Avglatlon, 'send_avg_gps')
+        while not self.client.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info("service not available...")
 
         # Timers
         self.timer = self.create_timer(1.0, self.timer_callback)
@@ -48,8 +58,41 @@ class GPSData(Node):
 
         self.get_logger().info("Start get_lonlat_movingbase_quat_ttyUSB node")
         self.get_logger().info("-------------------------")
+
+        # tkinter GUI setup
+        self.root = tk.Tk()
+        self.root.title("GPS Data Acquisition")
+        self.start_button = tk.Button(self.root, text="Start GPS Acquisition", command=self.start_gps_acquisition)
+        self.start_button.pack()
+
+        self.gps_acquisition_thread = None
+        self.is_acquiring = False
     
+    # service client
+    def send_request(self):
+        request = Avglatlon.Request()
+        request.avg_lat = self.initial_coordinate[0]  # ← average lat
+        request.avg_lon = self.initial_coordinate[1]  # ← average lon
+        request.theta = self.theta
+
+        future = self.client.call_async(request)
+        future.add_done_callback(self.response_callback)
+        
+    def response_callback(self, future):
+        try:
+            response = future.result()
+            if response.success:
+                self.get_logger().info('サービス送信成功')
+            else:
+                self.get_logger().warn('サービスは受け取られましたが、処理は失敗しました')
+        except Exception as e:
+            self.get_logger().error(f'サービス呼び出し失敗: {e}')
+           
+    # timer callback
     def timer_callback(self):
+        if not self.initialized:
+            # 初期化が完了していないので何もしない
+            return    
         self.gps_data_cache = self.get_gps_quat(self.dev_name, self.country_id)
 
         if self.gps_data_cache:
@@ -63,6 +106,33 @@ class GPSData(Node):
         else:
             self.get_logger().error("Failed to get GPS data")
 
+    # gps data collect
+    def start_gps_acquisition(self):
+        if not self.is_acquiring:
+            self.is_acquiring = True
+            self.gps_acquisition_thread = threading.Thread(target=self.acquire_gps_data)
+            self.gps_acquisition_thread.start()
+
+    def acquire_gps_data(self):
+        lat_sum = 0.0
+        lon_sum = 0.0
+        count = 0
+
+        start_time = time.time()
+        while time.time() - start_time < 10:  # 10 seconds
+            GPS_data = self.get_gps_quat(self.dev_name, self.country_id)
+            if GPS_data and GPS_data[1] != 0 and GPS_data[2] != 0:
+                lat_sum += GPS_data[1]
+                lon_sum += GPS_data[2]
+                count += 1
+            time.sleep(0.1)  # Slight delay to avoid overwhelming the GPS device
+
+        if count > 0:
+            self.initial_coordinate = [lat_sum / count, lon_sum / count]
+            self.initialized = True
+            self.get_logger().info(f"Initial coordinate set to: {self.initial_coordinate}")
+            self.send_request()
+        self.is_acquiring = False
 
     def get_gps_quat(self, dev_name, country_id):
         # interface with sensor device(as a serial port)
@@ -268,10 +338,10 @@ class GPSData(Node):
         r_theta = theta * degree_to_radian
         h_x = math.cos(r_theta) * gps_x - math.sin(r_theta) * gps_y
         h_y = math.sin(r_theta) * gps_x + math.cos(r_theta) * gps_y
-        point = (-h_x, -h_y)
+        #point = (-h_x, -h_y)
         #point = (-h_x, h_y)
         #point = (h_x, -h_y)
-        #point = (-h_y, h_x)
+        point = (-h_y, h_x)
         #point = (h_y, -h_x)
 
         return point
@@ -343,6 +413,7 @@ class GPSData(Node):
 
             
     def publish_odom(self, lat, lon, alt):
+        
         #GPS_data = self.get_gps_quat(self.dev_name, self.country_id)
         #gnggadata = (Fixtype_data,latitude_data,longitude_data,altitude_data,satelitecount_data,heading)
         #if GPS_data and GPS_data[1] != 0 and GPS_data[2] != 0:
@@ -373,9 +444,17 @@ class GPSData(Node):
             self.get_logger().error("!!!!-NOT RECIEVE-gps data error-!!!!")
 
 def main(args=None):
+    #rclpy.init(args=args)
+    #gpslonlat = GPSData()
+    #rclpy.spin(gpslonlat)
+    #gpslonlat.root.mainloop()
+    #gpslonlat.destroy_node()
+    #rclpy.shutdown()
     rclpy.init(args=args)
-    gpslonlat = GPSData()
-    rclpy.spin(gpslonlat)
+    gpslonlat = GPSData()    
+    ros_thread = threading.Thread(target=rclpy.spin, args=(gpslonlat,))
+    ros_thread.start()
+    gpslonlat.root.mainloop()  # tkinter GUI表示
     gpslonlat.destroy_node()
     rclpy.shutdown()
 
