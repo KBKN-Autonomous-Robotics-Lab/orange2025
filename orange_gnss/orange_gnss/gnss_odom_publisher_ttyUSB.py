@@ -89,8 +89,32 @@ class GPSData(Node):
         lon_sum = 0.0
         heading_sum = 0.0
         count = 0
+        initial_letters_outdoor = b"$GNHDT"
+        initial_letters_indoor = b"$GPHDT"
         serial_port = serial.Serial(self.dev_name, self.serial_baud)
         line = serial_port.readline()
+        talker_ID_indoor = line.find(initial_letters_indoor)
+        talker_ID_outdoor = line.find(initial_letters_outdoor)
+        if talker_ID_indoor != -1:
+            #self.get_logger().info("GPHDT ok")
+            #line = line[(talker_ID_indoor-1):]
+            gps_data = line.split(b",")
+            #self.get_logger().info(f"gps_data: {gps_data}")
+            heading = float(gps_data[1])
+            if heading is None:
+                self.get_logger().error("not GPS heading data")
+                heading = 0
+            break
+        if talker_ID_outdoor != -1:
+            #self.get_logger().info("GNHDT ok")
+            #line = line[(talker_ID_outdoor-1):]
+            gps_data = line.split(b",")
+            #self.get_logger().info(f"gps_data: {gps_data}")
+            heading = float(gps_data[1])
+            if heading is None:
+                self.get_logger().error("not GPS heading data")
+                heading = 0
+            break
 
         start_time = time.time()
         while time.time() - start_time < 10:  # 10 seconds
@@ -316,8 +340,8 @@ class GPSData(Node):
         r_theta = theta * degree_to_radian
         h_x = math.cos(r_theta) * gps_x - math.sin(r_theta) * gps_y
         h_y = math.sin(r_theta) * gps_x + math.cos(r_theta) * gps_y
-        #point = (-h_y, h_x)
-        point = (h_y, -h_x)
+        point = (-h_y, h_x)
+        #point = (h_y, -h_x)
 
         return point
     
