@@ -63,14 +63,14 @@
     <remap from="/estop/state" to="/estop"/>
   </node>
   <!-- imu  -->
-  <!--<include file="$(find-pkg-share icm_20948)/launch/run.launch.xml">
+  <include file="$(find-pkg-share icm_20948)/launch/run.launch.xml">
     <arg name="port" value="/dev/sensors/imu"/>
     <arg name="time_out" value="0.5"/>
     <arg name="baudrate" value="115200"/>
     <arg name="imu_topic" value="imu"/>
     <arg name="frame_id" value="imu_link"/>
     <arg name="debug" value="$(var debug_imu)"/>
-  </include>-->
+  </include>
   <!-- robot_localization -->
   <!--<include file="$(find-pkg-share orange_sensor_tools)/launch/localization.launch.xml">
     <arg name="odom_in" value="$(var odom_topic)"/>
@@ -80,7 +80,7 @@
   <!-- GPSposition_publisher -->
   <!-- initial heading:housei nakaniwa=179.169287 tsukuba= 276.5 -->
   <!-- GPSheading_publisher -->
-  <node pkg="orange_gnss" exec="get_lonlat_movingbase_quat_ttyUSB" output="screen">
+  <node pkg="orange_gnss" exec="gnss_odom_movingbase_fix_publisher_ttyUSB" output="screen">
     <param name="port" value="/dev/sensors/GNSS_UM982"/>
     <param name="baud" value="115200"/>
     <param name="country_id" value="0"/>
