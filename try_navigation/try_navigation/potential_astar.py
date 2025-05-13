@@ -259,15 +259,13 @@ class PotentialAStar(Node):
             relative_point_rot = np.array([[],[],[]])
         """    
         #pot_obs add(global)
-        """
         if len(self.pot_obs_points[0,:])>0:
-            relative_point_x = self.pot_obs_points[0,:] - self.position_x
-            relative_point_y = self.pot_obs_points[1,:] - self.position_y
-            relative_point = np.array((relative_point_x, relative_point_y, self.pot_obs_points[2,:]))
-            relative_point_rot, t_point_rot_matrix = rotation_xyz(relative_point, self.theta_x, self.theta_y, -self.theta_z)
+            pot_relative_point_x = self.pot_obs_points[0,:] - self.position_x
+            pot_relative_point_y = self.pot_obs_points[1,:] - self.position_y
+            pot_relative_point = np.array((pot_relative_point_x, pot_relative_point_y, self.pot_obs_points[2,:]))
+            pot_relative_point_rot, _ = rotation_xyz(pot_relative_point, self.theta_x, self.theta_y, -self.theta_z)
         else:
-            relative_point_rot = np.array([[],[],[]])
-        """
+            pot_relative_point_rot = np.array([[],[],[]])
         
         #pot_obs add(local)
         #if self.pot_obs_points.shape[1]>0:
@@ -277,17 +275,25 @@ class PotentialAStar(Node):
             
         #white_obs add
         if len(self.white_obs_points[0,:])>0:
-            relative_point_x = self.white_obs_points[0,:] - self.position_x
-            relative_point_y = self.white_obs_points[1,:] - self.position_y
-            relative_point = np.array((relative_point_x, relative_point_y, self.white_obs_points[2,:]))
-            relative_point_rot, t_point_rot_matrix = rotation_xyz(relative_point, self.theta_x, self.theta_y, -self.theta_z)
+            white_relative_point_x = self.white_obs_points[0,:] - self.position_x
+            white_relative_point_y = self.white_obs_points[1,:] - self.position_y
+            white_relative_point = np.array((white_relative_point_x, white_relative_point_y, self.white_obs_points[2,:]))
+            white_relative_point_rot, _ = rotation_xyz(white_relative_point, self.theta_x, self.theta_y, -self.theta_z)
         else:
-            relative_point_rot = np.array([[],[],[]])
+            white_relative_point_rot = np.array([[],[],[]])
         
         
         #obs round&duplicated  :grid_size before:28239 after100:24592 after50:8894 after10:3879
         obs_points = np.vstack((points[0,:], points[1,:], points[2,:]))
-        obs_points = np.insert(obs_points, len(obs_points[0,:]), relative_point_rot.T, axis=1)
+        
+        # それぞれが空でなければ追加
+        if pot_relative_point_rot.shape[1] > 0:
+            obs_points = np.insert(obs_points, len(obs_points[0,:]), pot_relative_point_rot.T, axis=1)
+
+        if white_relative_point_rot.shape[1] > 0:
+            obs_points = np.insert(obs_points, len(obs_points[0,:]), white_relative_point_rot.T, axis=1)
+        
+        #obs_points = np.insert(obs_points, len(obs_points[0,:]), relative_point_rot.T, axis=1)
         points_round = np.round(obs_points * self.obs_pixel) / self.obs_pixel
         obs_xy_local = points_round[:,~pd.DataFrame({"x":points_round[0,:], "y":points_round[1,:]}).duplicated()]
         obs_xy = np.vstack((obs_xy_local[0,:], obs_xy_local[1,:]))
