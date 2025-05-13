@@ -21,7 +21,7 @@ class GPSData(Node):
         self.declare_parameter('baud', 115200)
         self.declare_parameter('country_id', 0)
         self.declare_parameter('Position_magnification', 1.675)
-        self.declare_parameter('heading', 180)
+        self.declare_parameter('heading', 50)
 
         self.dev_name = self.get_parameter('port').get_parameter_value().string_value
         self.serial_baud = self.get_parameter('baud').get_parameter_value().integer_value
@@ -29,6 +29,7 @@ class GPSData(Node):
         self.Position_magnification = self.get_parameter('Position_magnification').get_parameter_value().double_value
         self.theta = self.get_parameter('heading').get_parameter_value().double_value
         
+        #self.theta = 50
         #self.theta = 275.6 # tukuba param
         #self.theta = 180 #nakaniwa param
         self.initial_coordinate = None
@@ -341,8 +342,8 @@ class GPSData(Node):
         #point = (-h_x, -h_y)
         #point = (-h_x, h_y)
         #point = (h_x, -h_y)
-        point = (-h_y, h_x)
-        #point = (h_y, -h_x)
+        #point = (-h_y, h_x)
+        point = (h_y, -h_x)
 
         return point
 
