@@ -29,7 +29,7 @@ from scipy import interpolate
 from std_msgs.msg import Float32MultiArray
 import cv2
 
-
+from sensor_msgs_py import point_cloud2 as pc2
 
 #map save
 #ros2 run nav2_map_server map_saver_cli -t /reflect_map_global -f ~/ros2_ws/src/map/test_map --ros-args -p map_subscribe_transient_local:=true -r __ns:=/namespace
@@ -64,7 +64,9 @@ class PotentialAStar(Node):
         #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom_fast', self.get_odom, qos_profile_sub)
         #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom_ekf_match', self.get_odom, qos_profile_sub)
         self.subscription = self.create_subscription(geometry_msgs.PoseArray,'/current_waypoint', self.get_waypoint, qos_profile_sub)
-        self.subscription = self.create_subscription(sensor_msgs.PointCloud2, '/map_obs', self.get_map_obs, qos_profile)
+        #self.subscription = self.create_subscription(sensor_msgs.PointCloud2, '/map_obs', self.get_map_obs, qos_profile)
+        self.pothole_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/pothole_points', self.get_pot_obs, qos_profile)
+        self.white_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/white_lines', self.get_white_obs, qos_profile)
         self.subscription  # 警告を回避するために設置されているだけです。削除しても挙動はかわりません。
         #self.timer = self.create_timer(0.05, self.timer_callback)
         
@@ -111,6 +113,12 @@ class PotentialAStar(Node):
         #map_obs
         self.map_obs_points = np.array([[],[],[]])
         
+        #pot_obs
+        self.pot_obs_points = np.array([[],[],[]])
+        
+        #white_obs
+        self.white_obs_points = np.array([[],[],[]])
+        
     def timer_callback(self):
         #
         pass
@@ -147,6 +155,40 @@ class PotentialAStar(Node):
         self.wp_xy = [relative_point_rot[0], relative_point_rot[1]]
 	
     def pointcloud2_to_array(self, cloud_msg):
+        available_fields = [field.name for field in cloud_msg.fields]
+        
+        fields = ("x","y","z")
+        use_intensity = "intensity" in available_fields
+        
+        if use_intensity:
+            fields += ("intensity",)
+
+        # PointCloud2 データを取得
+        points = pc2.read_points(cloud_msg, field_names=fields, skip_nans=True)
+
+        # データを配列に変換
+        x, y, z = [], [], []
+        intensity = []
+
+        for pt in points:
+            x.append(pt[0])
+            y.append(pt[1])
+            z.append(pt[2])
+            if use_intensity:
+                intensity.append(pt[3])
+
+        # numpy 配列に変換
+        x = np.array(x)
+        y = np.array(y)
+        z = np.array(z)
+
+        if use_intensity:
+            intensity = np.array(intensity)
+            return np.vstack((x, y, z, intensity))
+        else:
+            return np.vstack((x, y, z))
+        
+        """
         # Extract point cloud data
         points = np.frombuffer(cloud_msg.data, dtype=np.uint8).reshape(-1, cloud_msg.point_step)
         x = np.frombuffer(points[:, 0:4].tobytes(), dtype=np.float32)
@@ -158,6 +200,7 @@ class PotentialAStar(Node):
         point_cloud_matrix = np.vstack((x, y, z, intensity))
         
         return point_cloud_matrix
+        """
         
     def get_map_obs(self, msg):
         #print stamp message
@@ -170,6 +213,29 @@ class PotentialAStar(Node):
         
         self.map_obs_points = np.vstack((points[0,:], points[1,:], points[2,:]))
         
+    def get_pot_obs(self, msg):
+        print("pothole_points received")
+        #print stamp message
+        t_stamp = msg.header.stamp
+        #print(f"t_stamp ={t_stamp}")
+        
+        #get pcd data
+        points = self.pointcloud2_to_array(msg)
+        #print(f"points ={points.shape}")
+        
+        self.pot_obs_points = np.vstack((points[0,:], points[1,:], points[2,:]))
+        
+    def get_white_obs(self, msg):
+        #print stamp message
+        t_stamp = msg.header.stamp
+        #print(f"t_stamp ={t_stamp}")
+        
+        #get pcd data
+        points = self.pointcloud2_to_array(msg)
+        #print(f"points ={points.shape}")
+        
+        self.white_obs_points = np.vstack((points[0,:], points[1,:], points[2,:]))
+        
         
     def potential_astar(self, msg):
         
@@ -180,7 +246,9 @@ class PotentialAStar(Node):
         #get pcd data
         points = self.pointcloud2_to_array(msg)
         #print(f"points ={points.shape}")
+        print(f"self.pot_obs_points.shape = {self.pot_obs_points.shape}")
         
+        """
         #map_obs add
         if len(self.map_obs_points[0,:])>0:
             relative_point_x = self.map_obs_points[0,:] - self.position_x
@@ -189,11 +257,43 @@ class PotentialAStar(Node):
             relative_point_rot, t_point_rot_matrix = rotation_xyz(relative_point, self.theta_x, self.theta_y, -self.theta_z)
         else:
             relative_point_rot = np.array([[],[],[]])
+        """    
+        #pot_obs add(global)
+        if len(self.pot_obs_points[0,:])>0:
+            pot_relative_point_x = self.pot_obs_points[0,:] - self.position_x
+            pot_relative_point_y = self.pot_obs_points[1,:] - self.position_y
+            pot_relative_point = np.array((pot_relative_point_x, pot_relative_point_y, self.pot_obs_points[2,:]))
+            pot_relative_point_rot, _ = rotation_xyz(pot_relative_point, self.theta_x, self.theta_y, -self.theta_z)
+        else:
+            pot_relative_point_rot = np.array([[],[],[]])
+        
+        #pot_obs add(local)
+        #if self.pot_obs_points.shape[1]>0:
+        #    relative_point_rot = self.pot_obs_points.copy()
+        #else:
+        #    relative_point_rot = np.array([[],[],[]])
+            
+        #white_obs add
+        if len(self.white_obs_points[0,:])>0:
+            white_relative_point_x = self.white_obs_points[0,:] - self.position_x
+            white_relative_point_y = self.white_obs_points[1,:] - self.position_y
+            white_relative_point = np.array((white_relative_point_x, white_relative_point_y, self.white_obs_points[2,:]))
+            white_relative_point_rot, _ = rotation_xyz(white_relative_point, self.theta_x, self.theta_y, -self.theta_z)
+        else:
+            white_relative_point_rot = np.array([[],[],[]])
         
         
         #obs round&duplicated  :grid_size before:28239 after100:24592 after50:8894 after10:3879
         obs_points = np.vstack((points[0,:], points[1,:], points[2,:]))
-        obs_points = np.insert(obs_points, len(obs_points[0,:]), relative_point_rot.T, axis=1)
+        
+        # それぞれが空でなければ追加
+        if pot_relative_point_rot.shape[1] > 0:
+            obs_points = np.insert(obs_points, len(obs_points[0,:]), pot_relative_point_rot.T, axis=1)
+
+        if white_relative_point_rot.shape[1] > 0:
+            obs_points = np.insert(obs_points, len(obs_points[0,:]), white_relative_point_rot.T, axis=1)
+        
+        #obs_points = np.insert(obs_points, len(obs_points[0,:]), relative_point_rot.T, axis=1)
         points_round = np.round(obs_points * self.obs_pixel) / self.obs_pixel
         obs_xy_local = points_round[:,~pd.DataFrame({"x":points_round[0,:], "y":points_round[1,:]}).duplicated()]
         obs_xy = np.vstack((obs_xy_local[0,:], obs_xy_local[1,:]))

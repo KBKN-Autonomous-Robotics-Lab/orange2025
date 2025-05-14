@@ -51,6 +51,7 @@ setup(
             'path_follower = try_navigation.path_follower:main',
             'waypoint_manager = try_navigation.waypoint_manager:main',
             'reflection_intensity_map = try_navigation.reflection_intensity_map:main',
+            'reflection_to_pcd = try_navigation.reflection_to_pcd:main',
             'odom_wheel = try_navigation.odom_wheel:main',
             'waypoint_manager_maprun = try_navigation.waypoint_manager_maprun:main',
             'ekf_myself_match = try_navigation.ekf_myself_match:main',

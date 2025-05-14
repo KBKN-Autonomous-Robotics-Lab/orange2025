@@ -63,13 +63,13 @@ class ExtendedKalmanFilter(Node):
         ###########################
 
         self.sub_a = self.create_subscription(
-            Odometry, '/odom_wheel', self.sensor_a_callback, 10)
+            Odometry, '/odom/wheel_imu', self.sensor_a_callback, 10)
         self.sub_b = self.create_subscription(
             Odometry, '/odom/UM982', self.sensor_b_callback, 10)
         #self.sub_b = self.create_subscription(
         #    Odometry, '/odom_ref_slam', self.sensor_b_callback, 10)
 
-        self.declare_parameter("ekf_publish_TF", False)
+        self.declare_parameter("ekf_publish_TF", True)
         self.ekf_publish_TF = self.get_parameter(
             "ekf_publish_TF").get_parameter_value().bool_value
 

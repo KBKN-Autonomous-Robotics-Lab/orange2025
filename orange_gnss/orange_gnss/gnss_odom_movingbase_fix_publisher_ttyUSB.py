@@ -341,8 +341,8 @@ class GPSData(Node):
         #point = (-h_x, -h_y)
         #point = (-h_x, h_y)
         #point = (h_x, -h_y)
-        point = (-h_y, h_x)
-        #point = (h_y, -h_x)
+        #point = (-h_y, h_x)
+        point = (h_y, -h_x)
 
         return point
 
