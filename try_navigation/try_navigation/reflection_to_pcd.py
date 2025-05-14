@@ -89,7 +89,7 @@ class ReflectionIntensityMap(Node):
         self.publisher_map = self.create_publisher(Image, 'image_map', 10)
         self.publisher_binary = self.create_publisher(Image, 'image_binary', 10)
         self.publisher_oc = self.create_publisher(Image, 'image_oc', 10)
-        self.publisher_filtered = self.create_publisher(Image, 'image_filtered', 10)
+        #self.publisher_filtered = self.create_publisher(Image, 'image_filtered', 10)
         self.publisher_edge = self.create_publisher(Image, 'image_edge', 10)
         self.publisher_b1 = self.create_publisher(Image, 'image_b1', 10)
         self.publisher_b2 = self.create_publisher(Image, 'image_b2', 10)
@@ -289,18 +289,13 @@ class ReflectionIntensityMap(Node):
             
     def process_pgm(self, map_data_set, position_x, position_y):
         try:
-            #self.get_logger().info("=== [11]開始 ===")
             image, image_data = self.ref_to_image(map_data_set)
             if image is None:  
                self.get_logger().error(f"Failed to load 'map_data_set' ")
                return
-           # self.get_logger().info("=== [12]開始 ===")
             #self.log_image_size(image)
             
-            #self.get_logger().info("=== [13]開始 ===")
             binary_image = self.binarize_image(image)
-            #self.get_logger().info("=== [14]開始 ===")
-            
             # カーネル定義（必要に応じて調整）
             kernel_open = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))  #33 22 line got bigger but foot print and some noise left
             kernel_close = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2)) ##22 22 might be best so far 
@@ -314,12 +309,12 @@ class ReflectionIntensityMap(Node):
             oc_image = cv2.morphologyEx(closed_then, cv2.MORPH_OPEN, kernel_open)    
              
              
-            _, oc_image = cv2.threshold(oc_image, 127,255, cv2.THRESH_BINARY)
+            #_, oc_image = cv2.threshold(oc_image, 127,255, cv2.THRESH_BINARY)
             # === ここで連結成分分析を適用 ===
-            num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(oc_image)
+            #num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(oc_image)
 
             # 出力画像の初期化（黒）
-            filtered_image = np.zeros_like(oc_image)
+            #filtered_image = np.zeros_like(oc_image)
             
             edge_image = self.detect_edges(oc_image)
           
@@ -349,8 +344,8 @@ class ReflectionIntensityMap(Node):
             oc_image_msg = self.bridge.cv2_to_imgmsg(oc_image, encoding='mono8')
             self.publisher_oc.publish(oc_image_msg)
             # filtered=image  connected components analysis
-            filtered_image_msg = self.bridge.cv2_to_imgmsg(filtered_image, encoding='mono8')
-            self.publisher_filtered.publish(filtered_image_msg)
+            #filtered_image_msg = self.bridge.cv2_to_imgmsg(filtered_image, encoding='mono8')
+            #self.publisher_filtered.publish(filtered_image_msg)
             # エッジ行列   
             edge_image_msg = self.bridge.cv2_to_imgmsg(edge_image, encoding='mono8')
             self.publisher_edge.publish(edge_image_msg)
@@ -358,16 +353,6 @@ class ReflectionIntensityMap(Node):
             self.get_logger().error(f"画像処理中にエラーが発生しました: {e}")    
 
     def slice_image(self, image,band_height=20,num_bands=6):
-        """
-                入力画像を高さ方向にスライスして6つの横帯（2D行列）を返す。
-
-        Parameters:
-         - image: 入力画像（2D or 3DのNumPy array）
-         - band_height: 各帯の高さ（ピクセル単位、デフォルト4）
-
-          Returns:
-          - band1, band2, band3, band4, band5, band6: 各帯の2D画像データ（NumPy array）
-         """
         height, width = image.shape[:2]
         bands = []
         
@@ -383,13 +368,6 @@ class ReflectionIntensityMap(Node):
         return tuple(bands)
 
     def ref_to_image(self, map_data_set):
-        """
-        map_data_set: 入力となる反射強度や確率などの2次元行列（NumPy配列）
-    
-        出力:
-            - occupancy_grid_image: OpenCV等で画像化可能な行列（uint8）
-            - occupancy_grid_data: 数値処理や分析向けの行列（float or int）
-        """
         # 閾値の定義
         occ_threshold_param = 0.15  # 占有空間のしきい値
         free_threshold_param = 0.05 # 自由空間のしきい値
@@ -434,7 +412,7 @@ class ReflectionIntensityMap(Node):
         # ---- パラメータ定義 ----
         resolution = 1 / self.ground_pixel  # [m/pixel]
         origin_x = round(position_x - self.MAP_RANGE_GL + 0, 1)
-        origin_y = round(position_y - self.MAP_RANGE_GL + 14, 1)
+        origin_y = round(position_y - self.MAP_RANGE_GL + 8, 1)
 
         # ---- 障害物画素の抽出 ----
         #image_norm = cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
@@ -472,37 +450,25 @@ class ReflectionIntensityMap(Node):
     
     def classify_lines_to_pointcloud(self, image, position_x, position_y,step=1.0):
     # Hough変換で直線を検出する
-        #self.get_logger().info("=== [1]開始 ===")
-        #lines = cv2.HoughLinesP(image, 1, np.pi / 180, threshold=50, minLineLength=40, maxLineGap=20)
-        #lines = cv2.HoughLinesP(image, 1, np.pi / 180, threshold=30, minLineLength=20, maxLineGap=30) #No1 2025.5.8
-        lines = cv2.HoughLinesP(image, 1, np.pi / 180, threshold=30, minLineLength=10, maxLineGap=30) #
-
-        #self.get_logger().info("=== [2開始 ===")
+        lines = cv2.HoughLinesP(image, 1, np.pi / 180, threshold=30, minLineLength=10, maxLineGap=30) 
         dotted_points = []  # 点線として分類される点のリスト
         solid_points = []   # 実線として分類される点のリスト
-        
-        #self.get_logger().info("=== [3]開始 ===")
         if lines is not None:
            for line in lines:
                x1, y1, x2, y2 = line[0]
-
             # 線分の長さを計算
                length = np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
-
             # 線分を一定間隔に分割する点の数を計算
                num_points = max(int(length / step), 2)
-
             # 線分を等間隔に分割した点の座標を生成
                xs = np.linspace(x1, x2, num_points)
                ys = np.linspace(y1, y2, num_points)
-              # self.get_logger().info("=== [4]開始 ===")
             # 各点を地図座標（m単位）に変換して分類
             #('resolution', 1/self.ground_pixel), 
             #('origin', [round(position_x - self.MAP_RANGE_GL, 1), round(position_y - self.MAP_RANGE_GL, 1), round(0, 1)]) 
                resolution = 1/self.ground_pixel
                origin_x = round(position_x - self.MAP_RANGE_GL-0.3, 1)
                origin_y = round(position_y - self.MAP_RANGE_GL+0.15, 1)
-              # self.get_logger().info("=== [5]開始 ===")
                for x, y in zip(xs, ys):
                    map_x = x * resolution + origin_x
                    map_y = (image.shape[0] - y) * resolution + origin_y
@@ -512,7 +478,6 @@ class ReflectionIntensityMap(Node):
                       dotted_points.append([map_x, map_y, map_z])
                    else:
                       solid_points.append([map_x, map_y, map_z])
-        #self.get_logger().info("=== [6]開始 ===")
         # NumPyのfloat32型配列に変換
         dotted_array = np.array(dotted_points, dtype=np.float32)
         solid_array = np.array(solid_points, dtype=np.float32)
@@ -524,9 +489,6 @@ class ReflectionIntensityMap(Node):
         #    solid_array_buff = self.solid_array_buff
         #points_round = np.round(solid_array_buff * self.ground_pixel) / self.ground_pixel
         #self.solid_array_buff =points_round[:,~pd.DataFrame({"x":points_round[0,:], "y":points_round[1,:], "z":points_round[2,:]}).duplicated()]
-        
-        
-       #self.get_logger().info("=== [7]開始 ===")
         # ログ出力で確認
         self.get_logger().info(f"点線ポイント数: {len(dotted_array)}, 直線ポイント数: {len(solid_array)}")
         self.get_logger().info(f"点線データの一部: {dotted_array[:5]}")
