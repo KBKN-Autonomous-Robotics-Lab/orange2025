@@ -91,6 +91,8 @@ class ReflectionIntensityMap(Node):
         self.publisher_oc = self.create_publisher(Image, 'image_oc', 10)
         self.publisher_filtered = self.create_publisher(Image, 'image_filtered', 10)
         self.publisher_edge = self.create_publisher(Image, 'image_edge', 10)
+        self.publisher_b1 = self.create_publisher(Image, 'image_b1', 10)
+        self.publisher_b2 = self.create_publisher(Image, 'image_b2', 10)
         #self.publisher_hough = self.create_publisher(Image, 'image_hough', 10)
         self.bridge = CvBridge()
 
@@ -119,13 +121,13 @@ class ReflectionIntensityMap(Node):
         
         #ground 
         self.ground_pixel = 1000/50#障害物のグリッドサイズ設定
-        self.MAP_RANGE = 7.0 #[m]15 5
+        self.MAP_RANGE = 3.0 #[m]15 5
         
-        self.MAP_RANGE_GL = 7 #[m] 20 5 
-        self.MAP_LIM_X_MIN = -7.0 #[m]-25 5 
-        self.MAP_LIM_X_MAX =  7.0 #[m]25 5
-        self.MAP_LIM_Y_MIN = -7.0 #[m]-25 5 
-        self.MAP_LIM_Y_MAX =  7.0 #[m]25 5
+        self.MAP_RANGE_GL = 4 #[m] 20 5 
+        self.MAP_LIM_X_MIN = -4.0 #[m]-25 5 
+        self.MAP_LIM_X_MAX =  4.0 #[m]25 5
+        self.MAP_LIM_Y_MIN = -4.0 #[m]-25 5 
+        self.MAP_LIM_Y_MAX =  4.0 #[m]25 5
         
         #map position
         self.map_position_x_buff = 0.0 #[m]
@@ -300,7 +302,7 @@ class ReflectionIntensityMap(Node):
             #self.get_logger().info("=== [14]開始 ===")
             
             # カーネル定義（必要に応じて調整）
-            kernel_open = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))  #33 22 line got bigger but foot print and some noise left
+            kernel_open = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))  #33 22 line got bigger but foot print and some noise left
             kernel_close = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2)) ##22 22 might be best so far 
 
             # Open → Close
@@ -319,20 +321,6 @@ class ReflectionIntensityMap(Node):
             # 出力画像の初期化（黒）
             filtered_image = np.zeros_like(oc_image)
             
-            # 面積でフィルタ（線を残し、大きな塊や小ノイズを除去）
-            #for i in range(1, num_labels):  # 0番は背景なので無視
-            #    area = stats[i, cv2.CC_STAT_AREA]
-                #w = stats[i, cv2.CC_STAT_WIDTH]
-                #h = stats[i, cv2.CC_STAT_HEIGHT]
-
-                #aspect_ratio = w / h if h != 0 else 0
-
-                # 細長くて一定以上の面積があるものだけ残す（調整可）
-                #if 50 < area < 10000 and (aspect_ratio < 0.2 or aspect_ratio > 5):  # 縦長/横長OK
-             #   if 1 < area < 50000 :#and (aspect_ratio < 0.2 or aspect_ratio > 5):  # 縦長/横長OK
-              #      filtered_image[labels == i] = 255  # 該当ラベルを白に
-            
-            
             edge_image = self.detect_edges(oc_image)
           
            # self.get_logger().info("=== [15]開始 ===")
@@ -340,11 +328,18 @@ class ReflectionIntensityMap(Node):
             
             self.image_to_pcd(edge_image, position_x, position_y, step=1.0)
             
+            # 6つの帯を取得
+            b1, b2, b3, b4, b5, b6 = self.slice_image(edge_image)
+            
+            b1_image_msg = self.bridge.cv2_to_imgmsg(b4, encoding='mono8')
+            self.publisher_b1.publish(b1_image_msg)
+            b2_image_msg = self.bridge.cv2_to_imgmsg(b5, encoding='mono8')
+            self.publisher_b2.publish(b2_image_msg)         
+            
             self.publish_pointclouds(solid_cloud, dotted_cloud)
             #self.publish_pointclouds(self.solid_array_buff, dotted_cloud)
-            #self.get_logger().info("=== [16]開始 ===")
+            
             # 元行列
-
             map_data_set_image_msg = self.bridge.cv2_to_imgmsg(map_data_set, encoding='mono8')
             self.publisher_map.publish(map_data_set_image_msg)
             # 二値化行列
@@ -353,33 +348,39 @@ class ReflectionIntensityMap(Node):
             # OC行列
             oc_image_msg = self.bridge.cv2_to_imgmsg(oc_image, encoding='mono8')
             self.publisher_oc.publish(oc_image_msg)
-            
             # filtered=image  connected components analysis
             filtered_image_msg = self.bridge.cv2_to_imgmsg(filtered_image, encoding='mono8')
             self.publisher_filtered.publish(filtered_image_msg)
-            
-            
             # エッジ行列   
             edge_image_msg = self.bridge.cv2_to_imgmsg(edge_image, encoding='mono8')
             self.publisher_edge.publish(edge_image_msg)
-            
-            #self.get_logger().info("=== [5]開始 ===")
-            # 画像を1回だけ保存（デバッグ用）
-           # if not self.image_saved:
-            #   save_dir = "/home/ubuntu/ros2_ws/src/kbkn_maps/maps/tsukuba/whiteline"
-             #  os.makedirs(save_dir, exist_ok=True)
-               
-               #self.publisher_hough.publish(dotted_pc)
-               #cv2.imwrite(os.path.join(save_dir, "00_map_data_set.png"), map_data_set)
-               #cv2.imwrite(os.path.join(save_dir, "01_occupancy_grid_image.png"), image)
-               #cv2.imwrite(os.path.join(save_dir, "02_binary_image.png"), binary_image)
-               #cv2.imwrite(os.path.join(save_dir, "03_edge_image.png"), edge_image)
-              # self.image_saved = True
-               #self.get_logger().info("中間画像を保存しました")
-
-
         except Exception as e:
             self.get_logger().error(f"画像処理中にエラーが発生しました: {e}")    
+
+    def slice_image(self, image,band_height=20,num_bands=6):
+        """
+                入力画像を高さ方向にスライスして6つの横帯（2D行列）を返す。
+
+        Parameters:
+         - image: 入力画像（2D or 3DのNumPy array）
+         - band_height: 各帯の高さ（ピクセル単位、デフォルト4）
+
+          Returns:
+          - band1, band2, band3, band4, band5, band6: 各帯の2D画像データ（NumPy array）
+         """
+        height, width = image.shape[:2]
+        bands = []
+        
+        # 等間隔で分割された中心行のリスト（端を避けて安全な領域のみ）
+        centers = np.linspace(band_height//2, height - band_height//2, num_bands, dtype=int)
+
+        for center in centers:
+            y_start = max(center - band_height // 2, 0)
+            y_end = min(center + band_height // 2, height)
+            band = image[:, y_start:y_end]
+            bands.append(band)
+
+        return tuple(bands)
 
     def ref_to_image(self, map_data_set):
         """
@@ -438,7 +439,7 @@ class ReflectionIntensityMap(Node):
         # ---- 障害物画素の抽出 ----
         #image_norm = cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
         #obstacle_indices = np.where(image_norm > 0)  # 非ゼロ画素（障害物）
-        obstacle_indices = np.where(image > 128)
+        obstacle_indices = np.where(image > 128)# binary image <    #edge_image >128
         if len(obstacle_indices[0]) == 0:
             return  # 障害物がなければ処理しない
 
