@@ -93,12 +93,14 @@ class ReflectionIntensityMap(Node):
         self.publisher_edge = self.create_publisher(Image, 'image_edge', 10)
         self.publisher_b1 = self.create_publisher(Image, 'image_b1', 10)
         self.publisher_b2 = self.create_publisher(Image, 'image_b2', 10)
+        self.publisher_local = self.create_publisher(Image, 'image_local', 10)
         #self.publisher_hough = self.create_publisher(Image, 'image_hough', 10)
         self.bridge = CvBridge()
 
 
         self.image_saved = False  # 画像保存フラグ（初回のみ保存する）
-
+        #image_angle
+        self.angle_offset = 0
         #パラメータ
         #odom positon init
         self.position_x = 0.0 #[m]
@@ -121,13 +123,13 @@ class ReflectionIntensityMap(Node):
         
         #ground 
         self.ground_pixel = 1000/50#障害物のグリッドサイズ設定
-        self.MAP_RANGE = 3.0 #[m]15 5
+        self.MAP_RANGE = 7.0 #[m]15 5
         
-        self.MAP_RANGE_GL = 4 #[m] 20 5 
-        self.MAP_LIM_X_MIN = -4.0 #[m]-25 5 
-        self.MAP_LIM_X_MAX =  4.0 #[m]25 5
-        self.MAP_LIM_Y_MIN = -4.0 #[m]-25 5 
-        self.MAP_LIM_Y_MAX =  4.0 #[m]25 5
+        self.MAP_RANGE_GL = 7 #[m] 20 5 
+        self.MAP_LIM_X_MIN = -7.0 #[m]-25 5 
+        self.MAP_LIM_X_MAX =  7.0 #[m]25 5
+        self.MAP_LIM_Y_MIN = -7.0 #[m]-25 5 
+        self.MAP_LIM_Y_MAX =  7.0 #[m]25 5
         
         #map position
         self.map_position_x_buff = 0.0 #[m]
@@ -277,7 +279,7 @@ class ReflectionIntensityMap(Node):
                  
         
         ##############################  takamori line filter  #################################
-        self.process_pgm(map_data_gl_set, position_x, position_y)
+        self.process_pgm(map_data_gl_set, position_x, position_y, theta_y)
         #self.process_pgm(map_data_set, position_x, position_y)
         
          
@@ -287,7 +289,7 @@ class ReflectionIntensityMap(Node):
             #self.make_ref_map(ekf_position_x, ekf_position_y, ekf_theta_z)
             self.make_ref_map(map_data_gl_set, ekf_position_x, ekf_position_y, ekf_theta_z)
             
-    def process_pgm(self, map_data_set, position_x, position_y):
+    def process_pgm(self, map_data_set, position_x, position_y, theta_y):
         try:
             image, image_data = self.ref_to_image(map_data_set)
             if image is None:  
@@ -295,30 +297,24 @@ class ReflectionIntensityMap(Node):
                return
             #self.log_image_size(image)
             
+            ############ rotate image ##################
+            reflect_map_local = self.rotate_image(image, theta_y)
+            reflect_map_local_cut = self.crop_center(reflect_map_local, 400, 400)
+            reflect_map_local_set = reflect_map_local_cut.astype(np.uint8)
+            
+            
             binary_image = self.binarize_image(image)
-            # カーネル定義（必要に応じて調整）
-            kernel_open = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))  #33 22 line got bigger but foot print and some noise left
-            kernel_close = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2)) ##22 22 might be best so far 
-
+            kernel_open = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))  
+            kernel_close = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2)) 
             # Open → Close
             opened = cv2.morphologyEx(binary_image, cv2.MORPH_OPEN, kernel_open)
             open_close = cv2.morphologyEx(opened, cv2.MORPH_CLOSE, kernel_close)
-
-            # ↑この結果に対して Close → Open
+            #Close → Open
             closed_then = cv2.morphologyEx(open_close, cv2.MORPH_CLOSE, kernel_close)
             oc_image = cv2.morphologyEx(closed_then, cv2.MORPH_OPEN, kernel_open)    
              
-             
-            #_, oc_image = cv2.threshold(oc_image, 127,255, cv2.THRESH_BINARY)
-            # === ここで連結成分分析を適用 ===
-            #num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(oc_image)
-
-            # 出力画像の初期化（黒）
-            #filtered_image = np.zeros_like(oc_image)
-            
             edge_image = self.detect_edges(oc_image)
           
-           # self.get_logger().info("=== [15]開始 ===")
             dotted_cloud, solid_cloud = self.classify_lines_to_pointcloud(edge_image, position_x, position_y, step=1.0)
             
             self.image_to_pcd(edge_image, position_x, position_y, step=1.0)
@@ -334,29 +330,46 @@ class ReflectionIntensityMap(Node):
             self.publish_pointclouds(solid_cloud, dotted_cloud)
             #self.publish_pointclouds(self.solid_array_buff, dotted_cloud)
             
-            # 元行列
             map_data_set_image_msg = self.bridge.cv2_to_imgmsg(map_data_set, encoding='mono8')
             self.publisher_map.publish(map_data_set_image_msg)
-            # 二値化行列
             binary_image_msg = self.bridge.cv2_to_imgmsg(binary_image, encoding='mono8')
             self.publisher_binary.publish(binary_image_msg)
-            # OC行列
             oc_image_msg = self.bridge.cv2_to_imgmsg(oc_image, encoding='mono8')
             self.publisher_oc.publish(oc_image_msg)
-            # filtered=image  connected components analysis
-            #filtered_image_msg = self.bridge.cv2_to_imgmsg(filtered_image, encoding='mono8')
-            #self.publisher_filtered.publish(filtered_image_msg)
-            # エッジ行列   
             edge_image_msg = self.bridge.cv2_to_imgmsg(edge_image, encoding='mono8')
             self.publisher_edge.publish(edge_image_msg)
+            local_image_msg = self.bridge.cv2_to_imgmsg(reflect_map_local_set, encoding='mono8')
+            self.publisher_local.publish(local_image_msg)
         except Exception as e:
             self.get_logger().error(f"画像処理中にエラーが発生しました: {e}")    
-
+            
+    def rotate_image(self, image, angle): 
+        # 画像の中心を計算 
+        (h, w) = image.shape[:2] 
+        center = (w // 2, h // 2) 
+        # 回転行列を生成 
+        M = cv2.getRotationMatrix2D(center, angle, 1.0) 
+        # 画像を回転 
+        rotated_image = cv2.warpAffine(image, M, (w, h)) 
+        return rotated_image
+        
+    def crop_center(self, image, crop_width, crop_height): 
+        # 画像の高さと幅を取得 
+        height, width = image.shape 
+        # 中央の座標を計算 
+        center_x, center_y = width // 2, height // 2 
+        # 切り抜きの左上と右下の座標を計算 
+        x1 = center_x - (crop_width // 2) 
+        y1 = center_y - (crop_height // 2) 
+        x2 = center_x + (crop_width // 2) 
+        y2 = center_y + (crop_height // 2) 
+        # 画像を切り抜く 
+        cropped_image = image[y1:y2, x1:x2] 
+        return cropped_image
+        
     def slice_image(self, image,band_height=20,num_bands=6):
         height, width = image.shape[:2]
         bands = []
-        
-        # 等間隔で分割された中心行のリスト（端を避けて安全な領域のみ）
         centers = np.linspace(band_height//2, height - band_height//2, num_bands, dtype=int)
 
         for center in centers:
@@ -368,18 +381,14 @@ class ReflectionIntensityMap(Node):
         return tuple(bands)
 
     def ref_to_image(self, map_data_set):
-        # 閾値の定義
         occ_threshold_param = 0.15  # 占有空間のしきい値
         free_threshold_param = 0.05 # 自由空間のしきい値
 
         # 0〜1スケールと仮定し100倍する
         occ_threshold = occ_threshold_param * 100  # = 
         free_threshold = free_threshold_param * 100 # = 13
-
-        # 出力配列の初期化（画像出力形式）
+        
         occupancy_grid_image = np.zeros_like(map_data_set, dtype=np.uint8)
-    
-        # 出力配列の初期化（元の値を保持したデータ形式）
         occupancy_grid_data = np.zeros_like(map_data_set, dtype=np.float32)
 
         # 処理1: 占有空間（黒: 0）
@@ -411,12 +420,10 @@ class ReflectionIntensityMap(Node):
     def image_to_pcd(self, image, position_x, position_y, step=1.0):
         # ---- パラメータ定義 ----
         resolution = 1 / self.ground_pixel  # [m/pixel]
-        origin_x = round(position_x - self.MAP_RANGE_GL + 0, 1)
-        origin_y = round(position_y - self.MAP_RANGE_GL + 8, 1)
+        origin_x = round(position_x - self.MAP_RANGE_GL - 0, 1)
+        origin_y = round(position_y - self.MAP_RANGE_GL + 14, 1)
 
-        # ---- 障害物画素の抽出 ----
-        #image_norm = cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-        #obstacle_indices = np.where(image_norm > 0)  # 非ゼロ画素（障害物）
+        
         obstacle_indices = np.where(image > 128)# binary image <    #edge_image >128
         if len(obstacle_indices[0]) == 0:
             return  # 障害物がなければ処理しない
@@ -443,8 +450,6 @@ class ReflectionIntensityMap(Node):
         ]
 
         pc_msg = pc2.create_cloud(header,fields,points)
-
-        # ---- パブリッシュ ----
         self.white_line.publish(pc_msg)   
     
     
@@ -456,16 +461,11 @@ class ReflectionIntensityMap(Node):
         if lines is not None:
            for line in lines:
                x1, y1, x2, y2 = line[0]
-            # 線分の長さを計算
                length = np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
-            # 線分を一定間隔に分割する点の数を計算
                num_points = max(int(length / step), 2)
-            # 線分を等間隔に分割した点の座標を生成
                xs = np.linspace(x1, x2, num_points)
                ys = np.linspace(y1, y2, num_points)
             # 各点を地図座標（m単位）に変換して分類
-            #('resolution', 1/self.ground_pixel), 
-            #('origin', [round(position_x - self.MAP_RANGE_GL, 1), round(position_y - self.MAP_RANGE_GL, 1), round(0, 1)]) 
                resolution = 1/self.ground_pixel
                origin_x = round(position_x - self.MAP_RANGE_GL-0.3, 1)
                origin_y = round(position_y - self.MAP_RANGE_GL+0.15, 1)
@@ -498,24 +498,19 @@ class ReflectionIntensityMap(Node):
         
         
     def publish_pointclouds(self, solid_array, dotted_array):
-        self.get_logger().info("=== [1]開始 ===")
         fields = [
             PointField(name='x', offset=0, datatype=PointField.FLOAT32, count=1),
             PointField(name='y', offset=4, datatype=PointField.FLOAT32, count=1),
             PointField(name='z', offset=8, datatype=PointField.FLOAT32, count=1),
         ]
 
-        self.get_logger().info("=== [2]開始 ===")
         stamp = self.get_clock().now().to_msg()
         
         header = Header()
         header.stamp = self.get_clock().now().to_msg()
         header.frame_id = "odom"
-        
-        self.get_logger().info("=== [3]開始 ===")
         solid_pc = pc2.create_cloud(header, fields, solid_array.tolist())
         dotted_pc = pc2.create_cloud(header, fields, dotted_array.tolist())
-        self.get_logger().info("=== [4]開始 ===")
         self.solid_pub.publish(solid_pc)
         self.dotted_pub.publish(dotted_pc)
         self.get_logger().info("直線・点線の点群をパブリッシュしました")
