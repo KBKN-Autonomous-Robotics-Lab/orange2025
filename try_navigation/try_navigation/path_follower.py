@@ -296,9 +296,12 @@ class PathFollower(Node):
         if self.stop_flag == 0:
             twist_msg.linear.x = speed #0.3  # 前進速度 (m/s)
             twist_msg.angular.z = target_rad_pd  # 角速度 (rad/s)
+            #twist_msg.linear.x = -speed #0.3  # 前進速度 (m/s)
+            #twist_msg.angular.z = math.pi * target_rad_pd  # 角速度 (rad/s)
         else:
             twist_msg.linear.x = 0.0  # 前進速度 (m/s)
             twist_msg.angular.z = 0.0  # 角速度 (rad/s)
+        
         self.cmd_vel_publisher.publish(twist_msg)
         #self.get_logger().info('Publishing cmd_vel: linear.x = %f, angular.z = %f : %f deg' % (twist_msg.linear.x, twist_msg.angular.z, math.degrees(twist_msg.angular.z)))
         

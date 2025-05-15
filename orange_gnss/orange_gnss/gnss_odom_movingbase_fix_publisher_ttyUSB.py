@@ -21,7 +21,7 @@ class GPSData(Node):
         self.declare_parameter('baud', 115200)
         self.declare_parameter('country_id', 0)
         self.declare_parameter('Position_magnification', 1.675)
-        self.declare_parameter('heading', 180)
+        self.declare_parameter('heading', 0.0)
 
         self.dev_name = self.get_parameter('port').get_parameter_value().string_value
         self.serial_baud = self.get_parameter('baud').get_parameter_value().integer_value
@@ -338,10 +338,7 @@ class GPSData(Node):
         r_theta = theta * degree_to_radian
         h_x = math.cos(r_theta) * gps_x - math.sin(r_theta) * gps_y
         h_y = math.sin(r_theta) * gps_x + math.cos(r_theta) * gps_y
-        #point = (-h_x, -h_y)
-        #point = (-h_x, h_y)
-        #point = (h_x, -h_y)
-        #point = (-h_y, h_x)
+        
         point = (h_y, -h_x)
 
         return point
