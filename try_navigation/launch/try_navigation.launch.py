@@ -75,12 +75,12 @@ def generate_launch_description():
         # file path /ros2_ws/src/Use_action/navigation_control/navigation_control/gps_waypoint
         
         #reflection intensity map
-        Node(package='try_navigation',
-            executable='reflection_intensity_map',
-            name='reflection_intensity_map_node',
-            output='screen',
-            arguments=[],
-        ),
+        #Node(package='try_navigation',
+        #    executable='reflection_intensity_map',
+        #    name='reflection_intensity_map_node',
+        #    output='screen',
+        #    arguments=[],
+        #),
         #path planning
         Node(package='try_navigation',
             executable='potential_astar',
@@ -89,12 +89,12 @@ def generate_launch_description():
             arguments=[],
         ),
         #robot ctrl
-        Node(package='try_navigation',
-            executable='path_follower',
-            name='path_follower_node',
-            output='screen',
-            arguments=[],
-        ),
+        #Node(package='try_navigation',
+        #    executable='path_follower',
+        #    name='path_follower_node',
+        #    output='screen',
+        #    arguments=[],
+        #),
         
         #navigation start
         Node(package='navigation_control',
