@@ -228,6 +228,7 @@ class PathFollower(Node):
             #    target_theta = 0.0#-lim_steer
             #    target_rad = target_theta/180*math.pi
             #self.get_logger().info('rrrrrrrrrr go right rrrrrrrrrrrrrrrrr')
+        '''
         elif np.any(r_obs) and ~np.any(l_obs) and np.any(c_obs_near) :
             speed = 0.0
             target_rad, target_theta = self.set_target_rad(path, position_x, position_y, self.target_dist_near, theta_x, theta_y, theta_z)
@@ -252,7 +253,7 @@ class PathFollower(Node):
             speed = 0.25
             target_rad, target_theta = self.set_target_rad(path, position_x, position_y, self.target_dist_near, theta_x, theta_y, theta_z)
             #self.get_logger().info('dddddddddd speed down ddddddddddd')
-        
+        '''
         '''
         if self.rh_obs and ~self.lh_obs:
             speed = 0.15
@@ -274,10 +275,10 @@ class PathFollower(Node):
             speed = 0.15
             target_rad = lim_steer/180*math.pi
         
-        if abs(target_theta)  > 90:
-            speed = -0.15
-        if np.any(c_obs_back) :
-            speed = -0.15
+        #if abs(target_theta)  > 90:
+        #    speed = -0.15
+        #if np.any(c_obs_back) :
+        #    speed = -0.15
         
         
         

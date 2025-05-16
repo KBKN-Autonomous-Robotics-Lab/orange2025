@@ -93,8 +93,8 @@
   </node>
    -->
   <!-- combination_GPSposition_GPSheading -->
-  <node pkg="orange_gnss" exec="combination" output="screen">
-  </node>
+  <!--<node pkg="orange_gnss" exec="combination" output="screen">
+  </node>-->
   <!-- ekf_myself -->
   <!-- node pkg="orange_gnss" exec="ekf_myself" output="screen" >
     <param name="ekf_publish_TF" value="True"/>
