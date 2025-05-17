@@ -40,7 +40,7 @@ class PathFollower(Node):
         
         # Subscriptionを作成。
         self.subscription = self.create_subscription(nav_msgs.Path, '/potential_astar_path', self.get_path, qos_profile) #set subscribe pcd topic name
-        #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom_wheel', self.get_odom, qos_profile_sub)
+        #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom/wheel_imu', self.get_odom, qos_profile_sub)
         self.subscription = self.create_subscription(nav_msgs.Odometry,'/fusion/odom', self.get_odom, qos_profile_sub)
         #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom_ekf_match', self.get_odom, qos_profile_sub)
         #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom_ref_slam', self.get_odom_ref, qos_profile_sub)
@@ -194,7 +194,7 @@ class PathFollower(Node):
         
         #set speed
         
-        speed_set = 0.70#55
+        speed_set = 0.80#55
         speed = speed_set
         
         
@@ -228,7 +228,6 @@ class PathFollower(Node):
             #    target_theta = 0.0#-lim_steer
             #    target_rad = target_theta/180*math.pi
             #self.get_logger().info('rrrrrrrrrr go right rrrrrrrrrrrrrrrrr')
-        '''
         elif np.any(r_obs) and ~np.any(l_obs) and np.any(c_obs_near) :
             speed = 0.0
             target_rad, target_theta = self.set_target_rad(path, position_x, position_y, self.target_dist_near, theta_x, theta_y, theta_z)
@@ -253,7 +252,7 @@ class PathFollower(Node):
             speed = 0.25
             target_rad, target_theta = self.set_target_rad(path, position_x, position_y, self.target_dist_near, theta_x, theta_y, theta_z)
             #self.get_logger().info('dddddddddd speed down ddddddddddd')
-        '''
+        
         '''
         if self.rh_obs and ~self.lh_obs:
             speed = 0.15
@@ -275,10 +274,10 @@ class PathFollower(Node):
             speed = 0.15
             target_rad = lim_steer/180*math.pi
         
-        #if abs(target_theta)  > 90:
-        #    speed = -0.15
-        #if np.any(c_obs_back) :
-        #    speed = -0.15
+        if abs(target_theta)  > 90:
+            speed = -0.15
+        if np.any(c_obs_back) :
+            speed = -0.15
         
         
         

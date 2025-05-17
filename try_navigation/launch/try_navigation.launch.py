@@ -104,10 +104,10 @@ def generate_launch_description():
             arguments=[],
         ),
         #takamori
-        Node(package='try_navigation',
-            executable='reflection_to_pcd',
-            name='reflection_to_pcd',
-            output='screen',
-            arguments=[],
-        ),
+        #Node(package='try_navigation',
+        #    executable='reflection_to_pcd',
+        #    name='reflection_to_pcd',
+        #    output='screen',
+        #    arguments=[],
+        #),
     ])

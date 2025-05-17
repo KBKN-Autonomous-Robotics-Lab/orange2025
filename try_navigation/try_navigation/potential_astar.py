@@ -59,7 +59,7 @@ class PotentialAStar(Node):
         
         # Subscriptionを作成。CustomMsg型,'/livox/lidar'という名前のtopicをsubscribe。
         self.subscription = self.create_subscription(sensor_msgs.PointCloud2, '/pcd_segment_obs', self.potential_astar, qos_profile)
-        #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom_wheel', self.get_odom, qos_profile_sub)
+        #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom/wheel_imu', self.get_odom, qos_profile_sub)
         self.subscription = self.create_subscription(nav_msgs.Odometry,'/fusion/odom', self.get_odom, qos_profile_sub)
         #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom_fast', self.get_odom, qos_profile_sub)
         #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom_ekf_match', self.get_odom, qos_profile_sub)
@@ -90,7 +90,7 @@ class PotentialAStar(Node):
         self.cg=20 #ポテンシャルの引力パラメータ
         self.lg=20 #ポテンシャルの引力パラメータ
         self.co=11 #ポテンシャルの斥力パラメータ SICKパラ目：co=11;lo=0.55;
-        self.lo=0.38#55 #0.5#0.9#ポテンシャルの斥力パラメータ
+        self.lo=0.5#55 #0.5#0.9#ポテンシャルの斥力パラメータ
         self.est_xy = [0,0]#自己位置仮入力
         self.wp_xy = [10,0]#ウェイポイント仮入力
         self.astar_path = [0,10]#ウェイポイント仮入力
@@ -102,7 +102,7 @@ class PotentialAStar(Node):
         self.cg2nd=20 #ポテンシャルの引力パラメータ
         self.lg2nd=20 #ポテンシャルの引力パラメータ
         self.co2nd=11 #ポテンシャルの斥力パラメータ SICKパラ目：co=11;lo=0.55;
-        self.lo2nd=0.25#55 #0.5#0.9#ポテンシャルの斥力パラメータ  24/11/29 ok
+        self.lo2nd=0.3#55 #0.5#0.9#ポテンシャルの斥力パラメータ  24/11/29 ok
         #self.lo2nd=0.30#55 #0.5#0.9#ポテンシャルの斥力パラメータ
         
         
