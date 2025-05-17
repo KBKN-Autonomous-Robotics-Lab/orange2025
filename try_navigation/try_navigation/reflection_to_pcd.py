@@ -307,18 +307,21 @@ class ReflectionIntensityMap(Node):
             reflect_map_local_cut = self.crop_center(reflect_map_local, w//2, h//2)
             reflect_map_local_set = reflect_map_local_cut.astype(np.uint8)
             
-            bands, bands_p, sliced_height, sliced_width = list(self.slice_image(reflect_map_local_set))
-        
+            bands, bands_p, sliced_height, sliced_width = list(self.slice_image(reflect_map_local_set))   
+            
+            self.showgraph(bands)  
+            peak_image, peak_r_image = self.peaks_image(bands, bands_p,sliced_height, sliced_width)  
+            peak_r_image = self.make_lines(peak_r_image)
+            
+            reverse_angle_rad = math.radians(theta_z - 90)
+            #self.image_to_pcd_for_peak(peak_image, position_x, position_y, reverse_angle_rad, step=1.0)
+            self.image_to_pcd_for_peak(peak_r_image, position_x, position_y, reverse_angle_rad, step=1.0)
+            
+                    
             b1_image_msg = self.bridge.cv2_to_imgmsg(bands[0], encoding='mono8')
             self.publisher_b1.publish(b1_image_msg)
             b2_image_msg = self.bridge.cv2_to_imgmsg(bands[1], encoding='mono8')
-            self.publisher_b2.publish(b2_image_msg)     
-            
-            self.showgraph(bands)  
-            peak_image = self.peaks_image(bands, bands_p,sliced_height, sliced_width)  
-            reverse_angle_rad = math.radians(theta_z - 90)
-            #self.image_to_pcd_for_peak(peak_image, position_x, position_y, -(math.pi/2), step=1.0)
-            self.image_to_pcd_for_peak(peak_image, position_x, position_y, reverse_angle_rad, step=1.0)
+            self.publisher_b2.publish(b2_image_msg)  
             
             
             binary_image = self.binarize_image(image)
@@ -352,7 +355,45 @@ class ReflectionIntensityMap(Node):
             self.publisher_local.publish(local_image_msg)
             
         except Exception as e:
-            self.get_logger().error(f"画像処理中にエラーが発生しました: {e}")    
+            self.get_logger().error(f"画像処理中にエラーが発生しました: {e}")   
+             
+    def make_lines(self, image):
+        height, width = image.shape[:2]
+        y_coords, x_coords = np.where(image == 255 )
+        degree = 1
+        num_points = 100
+        
+        if len(x_coords) < degree + 1:
+           print("点が少なすぎて近似できません")
+           return image
+         # 多項式フィット（y = f(x)）
+        coeffs = np.polyfit(x_coords, y_coords, deg=degree)
+        poly = np.poly1d(coeffs)
+
+        # x の範囲を等間隔にサンプリング
+        #x_min = max(0, min(x_coords))
+        #x_max = min(width - 1, max(x_coords))
+        #x_fit = np.linspace(x_min, x_max, num_points)
+        #y_fit = poly(x_fit)
+        x_fit = np.linspace(0, width-1, num_points)
+        y_fit = poly(x_fit)
+        
+        
+        # 新しいマスク画像（近似曲線を描画）
+        curve_mask = np.zeros((height, width), dtype=np.uint8)
+
+        x_list = []
+        y_list = []
+
+        for x, y in zip(x_fit, y_fit):
+            xi = int(round(x))
+            yi = int(round(y))
+            if 0 <= xi < width and 0 <= yi < height:
+                curve_mask[yi, xi] = 255
+                x_list.append(xi)
+                y_list.append(yi)
+
+        return curve_mask
 
     def rotate_image(self, image, angle): 
         # 画像の中心を計算 
@@ -418,22 +459,24 @@ class ReflectionIntensityMap(Node):
     def peaks_image(self, bands, bands_p, height, width):
         # 元画像サイズのマスク画像を作成（初期値0）
         point_mask = np.zeros((height, width), dtype=np.uint8)
+        peaks_r = np.zeros((height, width), dtype=np.uint8)
 
         for i, band in enumerate(bands):
             # 反射強度を反転：強い反射ほど大きい値に
             inverted_band = 255 - band
             mean_values = np.mean(inverted_band, axis=0)  # axis=0: 各列の平均
-
             # 平滑化とピーク検出
             smoothed, peaks = self.smooth_and_find_peaks(mean_values)
-
+            
             y = bands_p[i]  # このバンドのY座標（元画像での高さ位置）
 
             for x in peaks:
                 if 0 <= x < width and 0 <= y < height:
                     point_mask[y, x] = 255  # 対応する位置に 1 をセット
+                if 0 <= x < width and 0 <= y < height and (width//2) <= x <= ((width//2)+20):
+                    peaks_r[y, x] = 255  # 対応する位置に 1 をセット
 
-        return point_mask
+        return point_mask, peaks_r
         
     def smooth_and_find_peaks(self, data, sigma=1, height=50, distance=10, prominence=10):
         """     
