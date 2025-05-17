@@ -35,6 +35,8 @@ from std_msgs.msg import Header
 import sensor_msgs_py.point_cloud2 as pc2
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
+from scipy.signal import find_peaks
+from scipy.ndimage import gaussian_filter1d
 
 
 #map save
@@ -85,6 +87,7 @@ class ReflectionIntensityMap(Node):
         self.solid_pub = self.create_publisher(PointCloud2, 'solid_lines', 10)
         self.solid_pub_buff = self.create_publisher(PointCloud2, 'solid_lines_buff', 10)
         self.white_line = self.create_publisher(PointCloud2, 'white_lines', 10)
+        self.peak_line = self.create_publisher(PointCloud2, 'peak_lines', 10)
   
         self.publisher_map = self.create_publisher(Image, 'image_map', 10)
         self.publisher_binary = self.create_publisher(Image, 'image_binary', 10)
@@ -279,7 +282,7 @@ class ReflectionIntensityMap(Node):
                  
         
         ##############################  takamori line filter  #################################
-        self.process_pgm(map_data_gl_set, position_x, position_y, theta_y)
+        self.process_pgm(map_data_gl_set, position_x, position_y, theta_z)
         #self.process_pgm(map_data_set, position_x, position_y)
         
          
@@ -289,7 +292,7 @@ class ReflectionIntensityMap(Node):
             #self.make_ref_map(ekf_position_x, ekf_position_y, ekf_theta_z)
             self.make_ref_map(map_data_gl_set, ekf_position_x, ekf_position_y, ekf_theta_z)
             
-    def process_pgm(self, map_data_set, position_x, position_y, theta_y):
+    def process_pgm(self, map_data_set, position_x, position_y, theta_z):
         try:
             image, image_data = self.ref_to_image(map_data_set)
             if image is None:  
@@ -297,10 +300,25 @@ class ReflectionIntensityMap(Node):
                return
             #self.log_image_size(image)
             
+            h,w=image.shape[:2]
             ############ rotate image ##################
-            reflect_map_local = self.rotate_image(image, theta_y)
-            reflect_map_local_cut = self.crop_center(reflect_map_local, 400, 400)
+            reflect_map_local = self.rotate_image(image, -theta_z+90)
+            #reflect_map_local = self.rotate_image(image, 90)
+            reflect_map_local_cut = self.crop_center(reflect_map_local, w//2, h//2)
             reflect_map_local_set = reflect_map_local_cut.astype(np.uint8)
+            
+            bands, bands_p, sliced_height, sliced_width = list(self.slice_image(reflect_map_local_set))
+        
+            b1_image_msg = self.bridge.cv2_to_imgmsg(bands[0], encoding='mono8')
+            self.publisher_b1.publish(b1_image_msg)
+            b2_image_msg = self.bridge.cv2_to_imgmsg(bands[1], encoding='mono8')
+            self.publisher_b2.publish(b2_image_msg)     
+            
+            self.showgraph(bands)  
+            peak_image = self.peaks_image(bands, bands_p,sliced_height, sliced_width)  
+            reverse_angle_rad = math.radians(theta_z - 90)
+            #self.image_to_pcd_for_peak(peak_image, position_x, position_y, -(math.pi/2), step=1.0)
+            self.image_to_pcd_for_peak(peak_image, position_x, position_y, reverse_angle_rad, step=1.0)
             
             
             binary_image = self.binarize_image(image)
@@ -319,14 +337,6 @@ class ReflectionIntensityMap(Node):
             
             self.image_to_pcd(edge_image, position_x, position_y, step=1.0)
             
-            # 6つの帯を取得
-            b1, b2, b3, b4, b5, b6 = self.slice_image(edge_image)
-            
-            b1_image_msg = self.bridge.cv2_to_imgmsg(b4, encoding='mono8')
-            self.publisher_b1.publish(b1_image_msg)
-            b2_image_msg = self.bridge.cv2_to_imgmsg(b5, encoding='mono8')
-            self.publisher_b2.publish(b2_image_msg)         
-            
             self.publish_pointclouds(solid_cloud, dotted_cloud)
             #self.publish_pointclouds(self.solid_array_buff, dotted_cloud)
             
@@ -340,9 +350,10 @@ class ReflectionIntensityMap(Node):
             self.publisher_edge.publish(edge_image_msg)
             local_image_msg = self.bridge.cv2_to_imgmsg(reflect_map_local_set, encoding='mono8')
             self.publisher_local.publish(local_image_msg)
+            
         except Exception as e:
             self.get_logger().error(f"画像処理中にエラーが発生しました: {e}")    
-            
+
     def rotate_image(self, image, angle): 
         # 画像の中心を計算 
         (h, w) = image.shape[:2] 
@@ -370,16 +381,171 @@ class ReflectionIntensityMap(Node):
     def slice_image(self, image,band_height=20,num_bands=6):
         height, width = image.shape[:2]
         bands = []
+        bands_p = []
         centers = np.linspace(band_height//2, height - band_height//2, num_bands, dtype=int)
 
         for center in centers:
             y_start = max(center - band_height // 2, 0)
             y_end = min(center + band_height // 2, height)
-            band = image[:, y_start:y_end]
+            band = image[y_start:y_end, :]
             bands.append(band)
+            band_p = (y_start + y_end)//2
+            bands_p.append(band_p)
 
-        return tuple(bands)
+        return tuple(bands),tuple(bands_p),height,width
+        
+    def showgraph(self, bands):
+        plt.ion()
+        plt.clf()
+        offset_step = 200
+        for i, band in enumerate(bands):
+            # 反射強度を反転：強い反射ほど大きい値に
+            inverted_band = 255 - band
+            mean_values = np.mean(inverted_band, axis=0)  # axis=0: 各列の平均
+            smoothed, peaks = self.smooth_and_find_peaks(mean_values)
+            offset = 500-(i * offset_step)
+            plt.plot(smoothed + offset,  'b-', linewidth=1.5) 
+            plt.plot(mean_values + offset, label=f'Band {i+1}')
+            plt.plot(peaks, smoothed[peaks] + offset, 'ro')
 
+        plt.title("Column-wise Mean Reflection Intensity")
+        plt.xlabel("Column Index")
+        plt.ylabel("Mean Intensity")
+        plt.legend()
+        plt.pause(0.01)
+        #plt.show()
+
+    def peaks_image(self, bands, bands_p, height, width):
+        # 元画像サイズのマスク画像を作成（初期値0）
+        point_mask = np.zeros((height, width), dtype=np.uint8)
+
+        for i, band in enumerate(bands):
+            # 反射強度を反転：強い反射ほど大きい値に
+            inverted_band = 255 - band
+            mean_values = np.mean(inverted_band, axis=0)  # axis=0: 各列の平均
+
+            # 平滑化とピーク検出
+            smoothed, peaks = self.smooth_and_find_peaks(mean_values)
+
+            y = bands_p[i]  # このバンドのY座標（元画像での高さ位置）
+
+            for x in peaks:
+                if 0 <= x < width and 0 <= y < height:
+                    point_mask[y, x] = 255  # 対応する位置に 1 をセット
+
+        return point_mask
+        
+    def smooth_and_find_peaks(self, data, sigma=1, height=50, distance=10, prominence=10):
+        """     
+        Parameters:
+            data (np.ndarray): 一次元配列（平均反射強度）
+            sigma (float): ガウシアンフィルタの強さ
+            height (float): ピークの最小高さ
+            distance (int): ピーク間の最小距離
+            prominence (float): 目立ち度（重要なピークだけを抽出）
+        Returns:
+            smoothed (np.ndarray): 平滑化後のデータ
+            peaks (np.ndarray): ピーク位置のインデックス
+        """
+        smoothed = gaussian_filter1d(data, sigma=sigma)
+        peaks, _ = find_peaks(smoothed, height=height, distance=distance, prominence=prominence)
+        return smoothed, peaks
+        #これはpeak_image用の角度に対応してるも　下のやつとほぼ一緒
+    def image_to_pcd_for_peak(self, image, position_x, position_y, yaw_rad, step=1.0):
+        try:
+            # ---- パラメータ定義 ----
+            resolution = 1 / self.ground_pixel  # [m/pixel]
+            h, w = image.shape[:2]
+
+            # 切り抜かれた画像の中心がロボット位置に対応していると仮定
+            origin_x = position_x - (w // 2) * resolution
+            origin_y = position_y + (h // 2) * resolution  # Y方向は上下が逆なので加算
+
+            # ---- 画像上の白点(255)を抽出 ----
+            obstacle_indices = np.where(image > 128)
+            if len(obstacle_indices[0]) == 0:
+                return
+
+            # ---- ピクセル座標を実世界座標に変換 ----
+            obs_x = obstacle_indices[1] * resolution + origin_x  # 横方向（列）→ X
+            obs_y = -obstacle_indices[0] * resolution + origin_y # 縦方向（行,反転）→ Y
+            obs_z = np.zeros_like(obs_x, dtype=np.float32)
+            obs_intensity = image[obstacle_indices].astype(np.float32)
+
+            # ---- 点群構築 ----
+            obs_matrix = np.vstack((obs_x, obs_y, obs_z, obs_intensity))
+            points = obs_matrix.T
+
+            # ---- ロボット中心で回転 ----
+            points[:, 0] -= position_x
+            points[:, 1] -= position_y
+
+            cos_yaw = np.cos(yaw_rad)
+            sin_yaw = np.sin(
+            yaw_rad)
+            rot = np.array([
+                [cos_yaw, -sin_yaw, 0],
+                [sin_yaw,  cos_yaw, 0],
+                [0,        0,       1]
+            ])
+            points[:, :3] = points[:, :3] @ rot.T
+
+            points[:, 0] += position_x
+            points[:, 1] += position_y
+
+            # ---- Publish as PointCloud2 ----
+            header = Header()
+            header.stamp = self.get_clock().now().to_msg()
+            header.frame_id = "odom"
+            fields = [
+                PointField(name='x', offset=0,  datatype=PointField.FLOAT32, count=1),
+                PointField(name='y', offset=4,  datatype=PointField.FLOAT32, count=1),
+                PointField(name='z', offset=8,  datatype=PointField.FLOAT32, count=1),
+                PointField(name='intensity', offset=12, datatype=PointField.FLOAT32, count=1),
+            ]
+            pc_msg = pc2.create_cloud(header, fields, points)
+            self.peak_line.publish(pc_msg)
+        except Exception as e:
+            self.get_logger().error(f"[image_to_pcd_for_peak] Error: {e}")
+
+       
+    def image_to_pcd(self, image, position_x, position_y, step=1.0):
+        # ---- パラメータ定義 ----
+        resolution = 1 / self.ground_pixel  # [m/pixel]
+        origin_x = round(position_x - self.MAP_RANGE_GL - 0, 1)
+        origin_y = round(position_y - self.MAP_RANGE_GL + 14, 1)
+
+        
+        obstacle_indices = np.where(image > 128)# binary image <    #edge_image >128
+        if len(obstacle_indices[0]) == 0:
+            return  # 障害物がなければ処理しない
+
+        # ---- ピクセル座標 → 実空間座標変換 ----
+        obs_x = obstacle_indices[1] * resolution + origin_x  # 列方向 → X
+        obs_y = -obstacle_indices[0] * resolution + origin_y # 行方向（反転）→ Y
+        obs_z = np.zeros_like(obs_x, dtype=np.float32)       # Z軸は平面上なので0
+        #obs_intensity = image_norm[obstacle_indices].astype(np.float32)  # 画素値を強度として使う
+        obs_intensity = image[obstacle_indices].astype(np.float32)
+        # ---- 点群作成 [X, Y, Z, Intensity] ----
+        obs_matrix = np.vstack((obs_x, obs_y, obs_z, obs_intensity))
+        points = obs_matrix.T  # shape: (N, 4)
+
+        # ---- PointCloud2 メッセージ作成 ----
+        header = Header()
+        header.stamp = self.get_clock().now().to_msg()
+        header.frame_id = "odom"
+        
+        fields = [
+        PointField(name='x', offset=0,  datatype=PointField.FLOAT32, count=1),
+        PointField(name='y', offset=4,  datatype=PointField.FLOAT32, count=1),
+        PointField(name='z', offset=8,  datatype=PointField.FLOAT32, count=1),
+        PointField(name='intensity', offset=12, datatype=PointField.FLOAT32, count=1),
+        ]
+
+        pc_msg = pc2.create_cloud(header,fields,points)
+        self.white_line.publish(pc_msg)   
+         
+         
     def ref_to_image(self, map_data_set):
         occ_threshold_param = 0.15  # 占有空間のしきい値
         free_threshold_param = 0.05 # 自由空間のしきい値
@@ -415,43 +581,7 @@ class ReflectionIntensityMap(Node):
         return binary_image
 
     def detect_edges(self, image):
-        return cv2.Canny(image, 50, 150)#50 150
-        
-    def image_to_pcd(self, image, position_x, position_y, step=1.0):
-        # ---- パラメータ定義 ----
-        resolution = 1 / self.ground_pixel  # [m/pixel]
-        origin_x = round(position_x - self.MAP_RANGE_GL - 0, 1)
-        origin_y = round(position_y - self.MAP_RANGE_GL + 14, 1)
-
-        
-        obstacle_indices = np.where(image > 128)# binary image <    #edge_image >128
-        if len(obstacle_indices[0]) == 0:
-            return  # 障害物がなければ処理しない
-
-        # ---- ピクセル座標 → 実空間座標変換 ----
-        obs_x = obstacle_indices[1] * resolution + origin_x  # 列方向 → X
-        obs_y = -obstacle_indices[0] * resolution + origin_y # 行方向（反転）→ Y
-        obs_z = np.zeros_like(obs_x, dtype=np.float32)       # Z軸は平面上なので0
-        #obs_intensity = image_norm[obstacle_indices].astype(np.float32)  # 画素値を強度として使う
-        obs_intensity = image[obstacle_indices].astype(np.float32)
-        # ---- 点群作成 [X, Y, Z, Intensity] ----
-        obs_matrix = np.vstack((obs_x, obs_y, obs_z, obs_intensity))
-        points = obs_matrix.T  # shape: (N, 4)
-        # ---- PointCloud2 メッセージ作成 ----
-        header = Header()
-        header.stamp = self.get_clock().now().to_msg()
-        header.frame_id = "odom"
-        
-        fields = [
-        PointField(name='x', offset=0,  datatype=PointField.FLOAT32, count=1),
-        PointField(name='y', offset=4,  datatype=PointField.FLOAT32, count=1),
-        PointField(name='z', offset=8,  datatype=PointField.FLOAT32, count=1),
-        PointField(name='intensity', offset=12, datatype=PointField.FLOAT32, count=1),
-        ]
-
-        pc_msg = pc2.create_cloud(header,fields,points)
-        self.white_line.publish(pc_msg)   
-    
+        return cv2.Canny(image, 50, 150)#50 150   
     
     def classify_lines_to_pointcloud(self, image, position_x, position_y,step=1.0):
     # Hough変換で直線を検出する
