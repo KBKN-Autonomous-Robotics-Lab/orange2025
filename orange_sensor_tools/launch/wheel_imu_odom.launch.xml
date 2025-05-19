@@ -21,6 +21,7 @@
     <param name="TF_header_frame" value="odom"/>
     <param name="TF_child_frame" value="base_footprint"/>
     <param name="scale_factor" value="0.45"/>
+    <param name="pitch_difference_threshold" value="0.1"/>
     <param name="debug" value="$(var debug_wheel_imu)"/>
   </node>
 </launch>
