@@ -83,25 +83,21 @@ class ReflectionIntensityMap(Node):
         self.pcd_ground_global_publisher = self.create_publisher(sensor_msgs.PointCloud2, 'pcd_ground_global', qos_profile) 
         self.reflect_map_local_publisher = self.create_publisher(OccupancyGrid, 'reflect_map_local', map_qos_profile_sub)
         self.reflect_map_global_publisher = self.create_publisher(OccupancyGrid, 'reflect_map_global', map_qos_profile_sub)
-        self.dotted_pub = self.create_publisher(PointCloud2, 'dotted_lines', 10)
-        self.solid_pub = self.create_publisher(PointCloud2, 'solid_lines', 10)
-        self.solid_pub_buff = self.create_publisher(PointCloud2, 'solid_lines_buff', 10)
+        #self.dotted_pub = self.create_publisher(PointCloud2, 'dotted_lines', 10)
+        #self.solid_pub = self.create_publisher(PointCloud2, 'solid_lines', 10)
+        #self.solid_pub_buff = self.create_publisher(PointCloud2, 'solid_lines_buff', 10)
         self.white_line = self.create_publisher(PointCloud2, 'white_lines', 10)
         self.peak_line = self.create_publisher(PointCloud2, 'peak_lines', 10)
         self.curve_pub = self.create_publisher(PointCloud2, 'curve_lines', 10)
-  
-        self.publisher_map = self.create_publisher(Image, 'image_map', 10)
-        self.publisher_binary = self.create_publisher(Image, 'image_binary', 10)
-        self.publisher_oc = self.create_publisher(Image, 'image_oc', 10)
-        #self.publisher_filtered = self.create_publisher(Image, 'image_filtered', 10)
+
         self.publisher_edge = self.create_publisher(Image, 'image_edge', 10)
-        self.publisher_b1 = self.create_publisher(Image, 'image_b1', 10)
-        self.publisher_b2 = self.create_publisher(Image, 'image_b2', 10)
         self.publisher_local = self.create_publisher(Image, 'image_local', 10)
-        
-        #self.publisher_hough = self.create_publisher(Image, 'image_hough', 10)
         self.bridge = CvBridge()
 
+        self.line_theta = 0.0
+        self.line_theta_flag = False
+        self.is_first = True
+        self.last_peak_x = None
 
         self.image_saved = False  # 画像保存フラグ（初回のみ保存する）
         #image_angle
@@ -304,29 +300,32 @@ class ReflectionIntensityMap(Node):
             
             h,w=image.shape[:2]
             ############ rotate image ##################
-            reflect_map_local = self.rotate_image(image, -theta_z+90)
+            
+            
+            #reflect_map_local = self.rotate_image(image, -theta_z+90)
             #reflect_map_local = self.rotate_image(image, 90)
+            reflect_map_local = self.rotate_image(image, -self.line_theta +90)
             reflect_map_local_cut = self.crop_center(reflect_map_local, w//2, h//2)
             reflect_map_local_set = reflect_map_local_cut.astype(np.uint8)
+            
+            local_image_msg = self.bridge.cv2_to_imgmsg(reflect_map_local_set, encoding='mono8')
+            self.publisher_local.publish(local_image_msg)
             
             bands, bands_p, sliced_height, sliced_width = list(self.slice_image(reflect_map_local_set))   
             
             self.showgraph(bands)  
             peak_image, peak_r_image = self.peaks_image(bands, bands_p,sliced_height, sliced_width)  
-            #peak_r_image = self.make_lines(peak_r_image)
             
-            reverse_angle_rad = math.radians(theta_z - 90)
+            reverse_angle_rad = math.radians(self.line_theta - 90)
             #self.image_to_pcd_for_peak(peak_image, position_x, position_y, reverse_angle_rad, step=1.0)
             peak_points = self.image_to_pcd_for_peak(peak_r_image, position_x, position_y, reverse_angle_rad, step=1.0)
-            curve_points = self.generate_lines(peak_points, interval = 0.1)
+            #curve_points, self.line_theta = self.generate_lines(peak_points, interval = 0.1, extend = 0.5)
+            curve_points, self.line_theta = self.generate_lines (peak_points, interval = 0.1, extend = 0.5, offset_distance=2.2, direction="right")
+            #print("角度（deg）:", np.degrees(self.line_theta))
+            print("角度（deg）:", self.line_theta)
             self.publish_pcd(curve_points)
-                    
-            b1_image_msg = self.bridge.cv2_to_imgmsg(bands[0], encoding='mono8')
-            self.publisher_b1.publish(b1_image_msg)
-            b2_image_msg = self.bridge.cv2_to_imgmsg(bands[1], encoding='mono8')
-            self.publisher_b2.publish(b2_image_msg)  
-            
-            
+
+
             binary_image = self.binarize_image(image)
             kernel_open = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))  
             kernel_close = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2)) 
@@ -348,6 +347,131 @@ class ReflectionIntensityMap(Node):
         except Exception as e:
             self.get_logger().error(f"画像処理中にエラーが発生しました: {e}")   
     
+
+    def generate_lines(self, points, interval, extend, offset_distance, direction):
+        """
+        与えられた点群から近似曲線を生成し、さらにその平行な曲線を生成して両側の線を構築する。
+
+        Parameters:
+            points (np.ndarray): shape (N, 4), 各点は [x, y, z, intensity]
+            interval (float): 曲線上の点の間隔 [m]
+            extend (float): x方向にどれだけ延長するか [m]
+            offset_distance (float): 平行移動させる距離（2本目の線との間隔）[m]
+            direction (str): "left" または "right"
+
+        Returns:
+            np.ndarray: 結果の点群 (M, 4), [x, y, z, intensity]
+            float: 曲線の方向角（角度）
+        """
+        N = points.shape[0]
+        if N < 2:
+            return np.empty((0, 4), dtype=np.float32), 0.0
+
+        x_vals = points[:, 0]
+        y_vals = points[:, 1]
+
+        if N == 2:
+            coeffs = np.polyfit(x_vals, y_vals, deg=1)
+            poly = np.poly1d(coeffs)
+            angle_rad = np.arctan(coeffs[0])
+        else:
+            coeffs = np.polyfit(x_vals, y_vals, deg=2)
+            poly = np.poly1d(coeffs)
+            x_mid = 0.5 * (np.min(x_vals) + np.max(x_vals))
+            dy_dx = 2 * coeffs[0] * x_mid + coeffs[1]
+            angle_rad = np.arctan(dy_dx)
+
+        x_min = np.min(x_vals)
+        x_max = np.max(x_vals) + extend
+        x_new = np.arange(x_min, x_max + interval, interval)
+        y_new = poly(x_new)
+
+        z_new = np.zeros_like(x_new, dtype=np.float32)
+        intensity_new = np.ones_like(x_new, dtype=np.float32)
+        curve_points = np.vstack((x_new, y_new, z_new, intensity_new)).T
+
+        all_points = [curve_points]
+
+        # 2本目の線を生成（平行移動）
+        if offset_distance > 0:
+            # 法線方向（直交）ベクトル
+            dx = np.gradient(x_new)
+            dy = np.gradient(y_new)
+            norm = np.sqrt(dx**2 + dy**2)
+            # 単位法線ベクトル（dy, -dx）
+            nx = dy / norm
+            ny = -dx / norm
+
+            # 方向に応じて符号反転
+            sign = 1 if direction == "left" else -1
+
+            x_offset = x_new + sign * offset_distance * nx
+            y_offset = y_new + sign * offset_distance * ny
+
+            offset_curve = np.vstack((x_offset, y_offset, z_new, intensity_new)).T
+            all_points.append(offset_curve)
+        result_points = np.vstack(all_points)
+        angle = np.degrees(angle_rad)
+
+        return result_points.astype(np.float32), angle
+
+    '''
+    def generate_lines(self, points, interval, extend):
+        """
+        与えられた点群から近似曲線を生成し、その曲線上に一定間隔で点を配置する。
+
+        Parameters:
+            points (np.ndarray): shape (N, 4), 各点は [x, y, z, intensity]
+            interval (float): 曲線上の点の間隔 [m]
+
+        Returns:
+            np.ndarray: 曲線上の点群 (M, 4), [x, y, z, intensity]
+        """
+        N = points.shape[0]
+        if N < 2:
+           return np.empty((0,4), dtype=np.float32),0.0
+        
+        # x, y 座標を抽出
+        x_vals = points[:, 0]
+        y_vals = points[:, 1]
+        
+        if N == 2:
+           coeffs = np.polyfit(x_vals, y_vals, deg=1)
+           poly = np.poly1d(coeffs)
+           #angle = np.arctan(coeffs[0])
+           angle_rad = np.arctan(coeffs[0])
+
+
+        else:
+           # 2次関数でフィッティング（必要に応じて次数変更可）
+           coeffs = np.polyfit(x_vals, y_vals, deg=2)
+           poly = np.poly1d(coeffs)
+           # 中央xでの接線の傾きを使って角度を取得
+           x_mid = 0.5 * (np.min(x_vals) + np.max(x_vals))
+           dy_dx = 2 * coeffs[0] * x_mid + coeffs[1]
+           #angle = np.arctan(dy_dx)
+           angle_rad = np.arctan(dy_dx)
+
+        # 点の配置範囲（xの最小～最大）
+        x_min = np.min(x_vals)
+        x_max = np.max(x_vals) + extend
+
+        # 間隔に応じた点のx座標を生成
+        x_new = np.arange(x_min, x_max + interval, interval)
+        y_new = poly(x_new)
+
+        # z, intensityは固定（必要に応じて変更）
+        z_new = np.zeros_like(x_new, dtype=np.float32)
+        intensity_new = np.ones_like(x_new, dtype=np.float32)
+
+        # 点群を生成
+        curve_points = np.vstack((x_new, y_new, z_new, intensity_new)).T
+        
+        #
+        angle = np.degrees(angle_rad)
+
+        return curve_points.astype(np.float32), angle
+   '''
     def publish_pcd(self, curve_points, frame_id="odom"):
         """
         指定された点群（curve_points）をPointCloud2としてパブリッシュする関数。
@@ -358,7 +482,7 @@ class ReflectionIntensityMap(Node):
             frame_id (str): PointCloud2 のフレームID
         """
         if curve_points.shape[0] == 0:
-            self.get_logger().warn("curve_points is empty, skipping publish.")
+            #self.get_logger().warn("curve_points is empty, skipping publish.")
             return
 
         header = Header()
@@ -374,86 +498,7 @@ class ReflectionIntensityMap(Node):
 
         pc_msg = pc2.create_cloud(header, fields, curve_points)
         self.curve_pub.publish(pc_msg)
-
-
-    def generate_lines(self, points, interval=0.5):
-        """
-        与えられた点群から近似曲線を生成し、その曲線上に一定間隔で点を配置する。
-
-        Parameters:
-            points (np.ndarray): shape (N, 4), 各点は [x, y, z, intensity]
-            interval (float): 曲線上の点の間隔 [m]
-
-        Returns:
-            np.ndarray: 曲線上の点群 (M, 4), [x, y, z, intensity]
-        """
-        if points.shape[0] < 3:
-            return np.empty((0, 4), dtype=np.float32)
-
-        # x, y 座標を抽出
-        x_vals = points[:, 0]
-        y_vals = points[:, 1]
-
-        # 2次関数でフィッティング（必要に応じて次数変更可）
-        coeffs = np.polyfit(x_vals, y_vals, deg=2)
-        poly = np.poly1d(coeffs)
-
-        # 点の配置範囲（xの最小～最大）
-        x_min = np.min(x_vals)
-        x_max = np.max(x_vals)
-
-        # 間隔に応じた点のx座標を生成
-        x_new = np.arange(x_min, x_max, interval)
-        y_new = poly(x_new)
-
-        # z, intensityは固定（必要に応じて変更）
-        z_new = np.zeros_like(x_new, dtype=np.float32)
-        intensity_new = np.ones_like(x_new, dtype=np.float32)
-
-        # 点群を生成
-        curve_points = np.vstack((x_new, y_new, z_new, intensity_new)).T
-
-        return curve_points.astype(np.float32)
-
-            
-    def make_lines(self, image):
-        height, width = image.shape[:2]
-        y_coords, x_coords = np.where(image == 255 )
-        degree = 1
-        num_points = 100
         
-        if len(x_coords) < degree + 1:
-           print("点が少なすぎて近似できません")
-           return image
-         # 多項式フィット（y = f(x)）
-        coeffs = np.polyfit(x_coords, y_coords, deg=degree)
-        poly = np.poly1d(coeffs)
-
-        # x の範囲を等間隔にサンプリング
-        #x_min = max(0, min(x_coords))
-        #x_max = min(width - 1, max(x_coords))
-        #x_fit = np.linspace(x_min, x_max, num_points)
-        #y_fit = poly(x_fit)
-        x_fit = np.linspace(0, width-1, num_points)
-        y_fit = poly(x_fit)
-        
-        
-        # 新しいマスク画像（近似曲線を描画）
-        curve_mask = np.zeros((height, width), dtype=np.uint8)
-
-        x_list = []
-        y_list = []
-
-        for x, y in zip(x_fit, y_fit):
-            xi = int(round(x))
-            yi = int(round(y))
-            if 0 <= xi < width and 0 <= yi < height:
-                curve_mask[yi, xi] = 255
-                x_list.append(xi)
-                y_list.append(yi)
-
-        return curve_mask
-
     def rotate_image(self, image, angle): 
         # 画像の中心を計算 
         (h, w) = image.shape[:2] 
@@ -532,9 +577,18 @@ class ReflectionIntensityMap(Node):
             for x in peaks:
                 if 0 <= x < width and 0 <= y < height:
                     point_mask[y, x] = 255  # 対応する位置に 1 をセット
-                if 0 <= x < width and 0 <= y < height and (width//2) <= x <= ((width//2)+20):
-                    peaks_r[y, x] = 255  # 対応する位置に 1 をセット
-
+                    if self.is_first:
+                       if ((width//2) + 10) <= x <= ((width//2) + 30):
+                          peaks_r[y, x] = 255  # 対応する位置に 1 をセット
+                          self.last_peak_x = x
+                          self.is_first = False
+                    else:
+                       if (self.last_peak_x - 10) <= x <= (self.last_peak_x + 10):
+                          peaks_r[y, x] = 255
+                          if ((height//2) - 20 ) <= y <  ((height//2)+20 ):
+                             self.last_peak_x = x
+                     
+                   
         return point_mask, peaks_r
         
     def smooth_and_find_peaks(self, data, sigma=1, height=50, distance=10, prominence=10):
