@@ -35,6 +35,8 @@ from std_msgs.msg import Header
 import sensor_msgs_py.point_cloud2 as pc2
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
+from scipy.signal import find_peaks
+from scipy.ndimage import gaussian_filter1d
 
 
 #map save
@@ -85,18 +87,25 @@ class ReflectionIntensityMap(Node):
         self.solid_pub = self.create_publisher(PointCloud2, 'solid_lines', 10)
         self.solid_pub_buff = self.create_publisher(PointCloud2, 'solid_lines_buff', 10)
         self.white_line = self.create_publisher(PointCloud2, 'white_lines', 10)
+        self.peak_line = self.create_publisher(PointCloud2, 'peak_lines', 10)
+        self.curve_pub = self.create_publisher(PointCloud2, 'curve_lines', 10)
   
         self.publisher_map = self.create_publisher(Image, 'image_map', 10)
         self.publisher_binary = self.create_publisher(Image, 'image_binary', 10)
         self.publisher_oc = self.create_publisher(Image, 'image_oc', 10)
-        self.publisher_filtered = self.create_publisher(Image, 'image_filtered', 10)
+        #self.publisher_filtered = self.create_publisher(Image, 'image_filtered', 10)
         self.publisher_edge = self.create_publisher(Image, 'image_edge', 10)
+        self.publisher_b1 = self.create_publisher(Image, 'image_b1', 10)
+        self.publisher_b2 = self.create_publisher(Image, 'image_b2', 10)
+        self.publisher_local = self.create_publisher(Image, 'image_local', 10)
+        
         #self.publisher_hough = self.create_publisher(Image, 'image_hough', 10)
         self.bridge = CvBridge()
 
 
         self.image_saved = False  # 画像保存フラグ（初回のみ保存する）
-
+        #image_angle
+        self.angle_offset = 0
         #パラメータ
         #odom positon init
         self.position_x = 0.0 #[m]
@@ -250,12 +259,12 @@ class ReflectionIntensityMap(Node):
         ekf_ground_set_z = ekf_ground_rot[2,:] + ekf_position[2]
         ekf_ground_set = np.vstack((ekf_ground_set_x, ekf_ground_set_y, ekf_ground_set_z))
         map_data_set_4save = grid_map_set(ekf_ground_set[1,:], ekf_ground_set[0,:], ground_reflect_conv, ekf_position, self.ground_pixel, self.MAP_RANGE)
-        print(f"map_data_set ={map_data_set.shape}")
+        #print(f"map_data_set ={map_data_set.shape}")
 	
         #GL reflect map
         #map_data_gl_set = grid_map_set(self.pcd_ground_buff[1,:], self.pcd_ground_buff[0,:], ground_reflect_conv, position, self.ground_pixel, self.MAP_RANGE_GL)
         map_data_gl_set = grid_map_set(ekf_ground_set[1,:], ekf_ground_set[0,:], ground_reflect_conv, ekf_position, self.ground_pixel, self.MAP_RANGE_GL)
-        print(f"map_data_set ={map_data_set.shape}")
+        #print(f"map_data_set ={map_data_set.shape}")
 	
         
         #publish for rviz2 
@@ -275,7 +284,7 @@ class ReflectionIntensityMap(Node):
                  
         
         ##############################  takamori line filter  #################################
-        self.process_pgm(map_data_gl_set, position_x, position_y)
+        self.process_pgm(map_data_gl_set, position_x, position_y, theta_z)
         #self.process_pgm(map_data_set, position_x, position_y)
         
          
@@ -285,122 +294,361 @@ class ReflectionIntensityMap(Node):
             #self.make_ref_map(ekf_position_x, ekf_position_y, ekf_theta_z)
             self.make_ref_map(map_data_gl_set, ekf_position_x, ekf_position_y, ekf_theta_z)
             
-    def process_pgm(self, map_data_set, position_x, position_y):
+    def process_pgm(self, map_data_set, position_x, position_y, theta_z):
         try:
-            #self.get_logger().info("=== [11]開始 ===")
             image, image_data = self.ref_to_image(map_data_set)
             if image is None:  
                self.get_logger().error(f"Failed to load 'map_data_set' ")
                return
-           # self.get_logger().info("=== [12]開始 ===")
             #self.log_image_size(image)
             
-            #self.get_logger().info("=== [13]開始 ===")
-            binary_image = self.binarize_image(image)
-            #self.get_logger().info("=== [14]開始 ===")
+            h,w=image.shape[:2]
+            ############ rotate image ##################
+            reflect_map_local = self.rotate_image(image, -theta_z+90)
+            #reflect_map_local = self.rotate_image(image, 90)
+            reflect_map_local_cut = self.crop_center(reflect_map_local, w//2, h//2)
+            reflect_map_local_set = reflect_map_local_cut.astype(np.uint8)
             
-            # カーネル定義（必要に応じて調整）
-            kernel_open = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))  #33 22 line got bigger but foot print and some noise left
-            kernel_close = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2)) ##22 22 might be best so far 
-
+            bands, bands_p, sliced_height, sliced_width = list(self.slice_image(reflect_map_local_set))   
+            
+            self.showgraph(bands)  
+            peak_image, peak_r_image = self.peaks_image(bands, bands_p,sliced_height, sliced_width)  
+            #peak_r_image = self.make_lines(peak_r_image)
+            
+            reverse_angle_rad = math.radians(theta_z - 90)
+            #self.image_to_pcd_for_peak(peak_image, position_x, position_y, reverse_angle_rad, step=1.0)
+            peak_points = self.image_to_pcd_for_peak(peak_r_image, position_x, position_y, reverse_angle_rad, step=1.0)
+            curve_points = self.generate_lines(peak_points, interval = 0.1)
+            self.publish_pcd(curve_points)
+                    
+            b1_image_msg = self.bridge.cv2_to_imgmsg(bands[0], encoding='mono8')
+            self.publisher_b1.publish(b1_image_msg)
+            b2_image_msg = self.bridge.cv2_to_imgmsg(bands[1], encoding='mono8')
+            self.publisher_b2.publish(b2_image_msg)  
+            
+            
+            binary_image = self.binarize_image(image)
+            kernel_open = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))  
+            kernel_close = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2)) 
             # Open → Close
             opened = cv2.morphologyEx(binary_image, cv2.MORPH_OPEN, kernel_open)
             open_close = cv2.morphologyEx(opened, cv2.MORPH_CLOSE, kernel_close)
-
-            # ↑この結果に対して Close → Open
+            #Close → Open
             closed_then = cv2.morphologyEx(open_close, cv2.MORPH_CLOSE, kernel_close)
             oc_image = cv2.morphologyEx(closed_then, cv2.MORPH_OPEN, kernel_open)    
              
-             
-            _, oc_image = cv2.threshold(oc_image, 127,255, cv2.THRESH_BINARY)
-            # === ここで連結成分分析を適用 ===
-            num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(oc_image)
-
-            # 出力画像の初期化（黒）
-            filtered_image = np.zeros_like(oc_image)
-            
-            # 面積でフィルタ（線を残し、大きな塊や小ノイズを除去）
-            #for i in range(1, num_labels):  # 0番は背景なので無視
-            #    area = stats[i, cv2.CC_STAT_AREA]
-                #w = stats[i, cv2.CC_STAT_WIDTH]
-                #h = stats[i, cv2.CC_STAT_HEIGHT]
-
-                #aspect_ratio = w / h if h != 0 else 0
-
-                # 細長くて一定以上の面積があるものだけ残す（調整可）
-                #if 50 < area < 10000 and (aspect_ratio < 0.2 or aspect_ratio > 5):  # 縦長/横長OK
-             #   if 1 < area < 50000 :#and (aspect_ratio < 0.2 or aspect_ratio > 5):  # 縦長/横長OK
-              #      filtered_image[labels == i] = 255  # 該当ラベルを白に
-            
-            
             edge_image = self.detect_edges(oc_image)
           
-           # self.get_logger().info("=== [15]開始 ===")
-            dotted_cloud, solid_cloud = self.classify_lines_to_pointcloud(edge_image, position_x, position_y, step=1.0)
+            #dotted_cloud, solid_cloud = self.classify_lines_to_pointcloud(edge_image, position_x, position_y, step=1.0)
             
             self.image_to_pcd(edge_image, position_x, position_y, step=1.0)
             
-            self.publish_pointclouds(solid_cloud, dotted_cloud)
-            #self.publish_pointclouds(self.solid_array_buff, dotted_cloud)
-            #self.get_logger().info("=== [16]開始 ===")
-            # 元行列
-
-            map_data_set_image_msg = self.bridge.cv2_to_imgmsg(map_data_set, encoding='mono8')
-            self.publisher_map.publish(map_data_set_image_msg)
-            # 二値化行列
-            binary_image_msg = self.bridge.cv2_to_imgmsg(binary_image, encoding='mono8')
-            self.publisher_binary.publish(binary_image_msg)
-            # OC行列
-            oc_image_msg = self.bridge.cv2_to_imgmsg(oc_image, encoding='mono8')
-            self.publisher_oc.publish(oc_image_msg)
+            #self.publish_pointclouds(solid_cloud, dotted_cloud)
             
-            # filtered=image  connected components analysis
-            filtered_image_msg = self.bridge.cv2_to_imgmsg(filtered_image, encoding='mono8')
-            self.publisher_filtered.publish(filtered_image_msg)
-            
-            
-            # エッジ行列   
-            edge_image_msg = self.bridge.cv2_to_imgmsg(edge_image, encoding='mono8')
-            self.publisher_edge.publish(edge_image_msg)
-            
-            #self.get_logger().info("=== [5]開始 ===")
-            # 画像を1回だけ保存（デバッグ用）
-           # if not self.image_saved:
-            #   save_dir = "/home/ubuntu/ros2_ws/src/kbkn_maps/maps/tsukuba/whiteline"
-             #  os.makedirs(save_dir, exist_ok=True)
-               
-               #self.publisher_hough.publish(dotted_pc)
-               #cv2.imwrite(os.path.join(save_dir, "00_map_data_set.png"), map_data_set)
-               #cv2.imwrite(os.path.join(save_dir, "01_occupancy_grid_image.png"), image)
-               #cv2.imwrite(os.path.join(save_dir, "02_binary_image.png"), binary_image)
-               #cv2.imwrite(os.path.join(save_dir, "03_edge_image.png"), edge_image)
-              # self.image_saved = True
-               #self.get_logger().info("中間画像を保存しました")
-
-
         except Exception as e:
-            self.get_logger().error(f"画像処理中にエラーが発生しました: {e}")    
-
-    def ref_to_image(self, map_data_set):
-        """
-        map_data_set: 入力となる反射強度や確率などの2次元行列（NumPy配列）
+            self.get_logger().error(f"画像処理中にエラーが発生しました: {e}")   
     
-        出力:
-            - occupancy_grid_image: OpenCV等で画像化可能な行列（uint8）
-            - occupancy_grid_data: 数値処理や分析向けの行列（float or int）
+    def publish_pcd(self, curve_points, frame_id="odom"):
         """
-        # 閾値の定義
+        指定された点群（curve_points）をPointCloud2としてパブリッシュする関数。
+
+        Parameters:
+            self: ROS2 ノード（self.get_clock() や self.curve_pub などを使う想定）
+            curve_points (np.ndarray): shape (M, 4), 各点 [x, y, z, intensity]
+            frame_id (str): PointCloud2 のフレームID
+        """
+        if curve_points.shape[0] == 0:
+            self.get_logger().warn("curve_points is empty, skipping publish.")
+            return
+
+        header = Header()
+        header.stamp = self.get_clock().now().to_msg()
+        header.frame_id = frame_id
+
+        fields = [
+            PointField(name='x', offset=0, datatype=PointField.FLOAT32, count=1),
+            PointField(name='y', offset=4, datatype=PointField.FLOAT32, count=1),
+            PointField(name='z', offset=8, datatype=PointField.FLOAT32, count=1),
+            PointField(name='intensity', offset=12, datatype=PointField.FLOAT32, count=1),
+        ]
+
+        pc_msg = pc2.create_cloud(header, fields, curve_points)
+        self.curve_pub.publish(pc_msg)
+
+
+    def generate_lines(self, points, interval=0.5):
+        """
+        与えられた点群から近似曲線を生成し、その曲線上に一定間隔で点を配置する。
+
+        Parameters:
+            points (np.ndarray): shape (N, 4), 各点は [x, y, z, intensity]
+            interval (float): 曲線上の点の間隔 [m]
+
+        Returns:
+            np.ndarray: 曲線上の点群 (M, 4), [x, y, z, intensity]
+        """
+        if points.shape[0] < 3:
+            return np.empty((0, 4), dtype=np.float32)
+
+        # x, y 座標を抽出
+        x_vals = points[:, 0]
+        y_vals = points[:, 1]
+
+        # 2次関数でフィッティング（必要に応じて次数変更可）
+        coeffs = np.polyfit(x_vals, y_vals, deg=2)
+        poly = np.poly1d(coeffs)
+
+        # 点の配置範囲（xの最小～最大）
+        x_min = np.min(x_vals)
+        x_max = np.max(x_vals)
+
+        # 間隔に応じた点のx座標を生成
+        x_new = np.arange(x_min, x_max, interval)
+        y_new = poly(x_new)
+
+        # z, intensityは固定（必要に応じて変更）
+        z_new = np.zeros_like(x_new, dtype=np.float32)
+        intensity_new = np.ones_like(x_new, dtype=np.float32)
+
+        # 点群を生成
+        curve_points = np.vstack((x_new, y_new, z_new, intensity_new)).T
+
+        return curve_points.astype(np.float32)
+
+            
+    def make_lines(self, image):
+        height, width = image.shape[:2]
+        y_coords, x_coords = np.where(image == 255 )
+        degree = 1
+        num_points = 100
+        
+        if len(x_coords) < degree + 1:
+           print("点が少なすぎて近似できません")
+           return image
+         # 多項式フィット（y = f(x)）
+        coeffs = np.polyfit(x_coords, y_coords, deg=degree)
+        poly = np.poly1d(coeffs)
+
+        # x の範囲を等間隔にサンプリング
+        #x_min = max(0, min(x_coords))
+        #x_max = min(width - 1, max(x_coords))
+        #x_fit = np.linspace(x_min, x_max, num_points)
+        #y_fit = poly(x_fit)
+        x_fit = np.linspace(0, width-1, num_points)
+        y_fit = poly(x_fit)
+        
+        
+        # 新しいマスク画像（近似曲線を描画）
+        curve_mask = np.zeros((height, width), dtype=np.uint8)
+
+        x_list = []
+        y_list = []
+
+        for x, y in zip(x_fit, y_fit):
+            xi = int(round(x))
+            yi = int(round(y))
+            if 0 <= xi < width and 0 <= yi < height:
+                curve_mask[yi, xi] = 255
+                x_list.append(xi)
+                y_list.append(yi)
+
+        return curve_mask
+
+    def rotate_image(self, image, angle): 
+        # 画像の中心を計算 
+        (h, w) = image.shape[:2] 
+        center = (w // 2, h // 2) 
+        # 回転行列を生成 
+        M = cv2.getRotationMatrix2D(center, angle, 1.0) 
+        # 画像を回転 
+        rotated_image = cv2.warpAffine(image, M, (w, h)) 
+        return rotated_image
+        
+    def crop_center(self, image, crop_width, crop_height): 
+        # 画像の高さと幅を取得 
+        height, width = image.shape 
+        # 中央の座標を計算 
+        center_x, center_y = width // 2, height // 2 
+        # 切り抜きの左上と右下の座標を計算 
+        x1 = center_x - (crop_width // 2) 
+        y1 = center_y - (crop_height // 2) 
+        x2 = center_x + (crop_width // 2) 
+        y2 = center_y + (crop_height // 2) 
+        # 画像を切り抜く 
+        cropped_image = image[y1:y2, x1:x2] 
+        return cropped_image
+        
+    def slice_image(self, image,band_height=20,num_bands=6):
+        height, width = image.shape[:2]
+        bands = []
+        bands_p = []
+        centers = np.linspace(band_height//2, height - band_height//2, num_bands, dtype=int)
+
+        for center in centers:
+            y_start = max(center - band_height // 2, 0)
+            y_end = min(center + band_height // 2, height)
+            band = image[y_start:y_end, :]
+            bands.append(band)
+            band_p = (y_start + y_end)//2
+            bands_p.append(band_p)
+
+        return tuple(bands),tuple(bands_p),height,width
+        
+    def showgraph(self, bands):
+        plt.ion()
+        plt.clf()
+        offset_step = 200
+        for i, band in enumerate(bands):
+            # 反射強度を反転：強い反射ほど大きい値に
+            inverted_band = 255 - band
+            mean_values = np.mean(inverted_band, axis=0)  # axis=0: 各列の平均
+            smoothed, peaks = self.smooth_and_find_peaks(mean_values)
+            offset = 500-(i * offset_step)
+            plt.plot(smoothed + offset,  'b-', linewidth=1.5) 
+            plt.plot(mean_values + offset, label=f'Band {i+1}')
+            plt.plot(peaks, smoothed[peaks] + offset, 'ro')
+
+        plt.title("Column-wise Mean Reflection Intensity")
+        plt.xlabel("Column Index")
+        plt.ylabel("Mean Intensity")
+        plt.legend()
+        plt.pause(0.01)
+        #plt.show()
+
+    def peaks_image(self, bands, bands_p, height, width):
+        # 元画像サイズのマスク画像を作成（初期値0）
+        point_mask = np.zeros((height, width), dtype=np.uint8)
+        peaks_r = np.zeros((height, width), dtype=np.uint8)
+
+        for i, band in enumerate(bands):
+            # 反射強度を反転：強い反射ほど大きい値に
+            inverted_band = 255 - band
+            mean_values = np.mean(inverted_band, axis=0)  # axis=0: 各列の平均
+            # 平滑化とピーク検出
+            smoothed, peaks = self.smooth_and_find_peaks(mean_values)
+            
+            y = bands_p[i]  # このバンドのY座標（元画像での高さ位置）
+
+            for x in peaks:
+                if 0 <= x < width and 0 <= y < height:
+                    point_mask[y, x] = 255  # 対応する位置に 1 をセット
+                if 0 <= x < width and 0 <= y < height and (width//2) <= x <= ((width//2)+20):
+                    peaks_r[y, x] = 255  # 対応する位置に 1 をセット
+
+        return point_mask, peaks_r
+        
+    def smooth_and_find_peaks(self, data, sigma=1, height=50, distance=10, prominence=10):
+        smoothed = gaussian_filter1d(data, sigma=sigma)
+        peaks, _ = find_peaks(smoothed, height=height, distance=distance, prominence=prominence)
+        return smoothed, peaks
+        
+        #これはpeak_image用の角度に対応してるも　下のやつとほぼ一緒
+    def image_to_pcd_for_peak(self, image, position_x, position_y, yaw_rad, step=1.0):
+        try:
+            # ---- パラメータ定義 ----
+            resolution = 1 / self.ground_pixel  # [m/pixel]
+            h, w = image.shape[:2]
+
+            # 切り抜かれた画像の中心がロボット位置に対応していると仮定
+            origin_x = position_x - (w // 2) * resolution
+            origin_y = position_y + (h // 2) * resolution  # Y方向は上下が逆なので加算
+
+            # ---- 画像上の白点(255)を抽出 ----
+            obstacle_indices = np.where(image > 128)
+            if len(obstacle_indices[0]) == 0:
+                return
+
+            # ---- ピクセル座標を実世界座標に変換 ----
+            obs_x = obstacle_indices[1] * resolution + origin_x  # 横方向（列）→ X
+            obs_y = -obstacle_indices[0] * resolution + origin_y # 縦方向（行,反転）→ Y
+            obs_z = np.zeros_like(obs_x, dtype=np.float32)
+            obs_intensity = image[obstacle_indices].astype(np.float32)
+
+            # ---- 点群構築 ----
+            obs_matrix = np.vstack((obs_x, obs_y, obs_z, obs_intensity))
+            points = obs_matrix.T
+
+            # ---- ロボット中心で回転 ----
+            points[:, 0] -= position_x
+            points[:, 1] -= position_y
+
+            cos_yaw = np.cos(yaw_rad)
+            sin_yaw = np.sin(
+            yaw_rad)
+            rot = np.array([
+                [cos_yaw, -sin_yaw, 0],
+                [sin_yaw,  cos_yaw, 0],
+                [0,        0,       1]
+            ])
+            points[:, :3] = points[:, :3] @ rot.T
+
+            points[:, 0] += position_x
+            points[:, 1] += position_y
+
+            # ---- Publish as PointCloud2 ----
+            header = Header()
+            header.stamp = self.get_clock().now().to_msg()
+            header.frame_id = "odom"
+            fields = [
+                PointField(name='x', offset=0,  datatype=PointField.FLOAT32, count=1),
+                PointField(name='y', offset=4,  datatype=PointField.FLOAT32, count=1),
+                PointField(name='z', offset=8,  datatype=PointField.FLOAT32, count=1),
+                PointField(name='intensity', offset=12, datatype=PointField.FLOAT32, count=1),
+            ]
+            pc_msg = pc2.create_cloud(header, fields, points)
+            self.peak_line.publish(pc_msg)
+            return points
+            
+        except Exception as e:
+            self.get_logger().error(f"[image_to_pcd_for_peak] Error: {e}")
+
+       
+    def image_to_pcd(self, image, position_x, position_y, step=1.0):
+        # ---- パラメータ定義 ----
+        resolution = 1 / self.ground_pixel  # [m/pixel]
+        origin_x = round(position_x - self.MAP_RANGE_GL - 0, 1)
+        origin_y = round(position_y - self.MAP_RANGE_GL + 14, 1)
+
+        
+        obstacle_indices = np.where(image > 128)# binary image <    #edge_image >128
+        if len(obstacle_indices[0]) == 0:
+            return  # 障害物がなければ処理しない
+
+        # ---- ピクセル座標 → 実空間座標変換 ----
+        obs_x = obstacle_indices[1] * resolution + origin_x  # 列方向 → X
+        obs_y = -obstacle_indices[0] * resolution + origin_y # 行方向（反転）→ Y
+        obs_z = np.zeros_like(obs_x, dtype=np.float32)       # Z軸は平面上なので0
+        #obs_intensity = image_norm[obstacle_indices].astype(np.float32)  # 画素値を強度として使う
+        obs_intensity = image[obstacle_indices].astype(np.float32)
+        # ---- 点群作成 [X, Y, Z, Intensity] ----
+        obs_matrix = np.vstack((obs_x, obs_y, obs_z, obs_intensity))
+        points = obs_matrix.T  # shape: (N, 4)
+
+        # ---- PointCloud2 メッセージ作成 ----
+        header = Header()
+        header.stamp = self.get_clock().now().to_msg()
+        header.frame_id = "odom"
+        
+        fields = [
+        PointField(name='x', offset=0,  datatype=PointField.FLOAT32, count=1),
+        PointField(name='y', offset=4,  datatype=PointField.FLOAT32, count=1),
+        PointField(name='z', offset=8,  datatype=PointField.FLOAT32, count=1),
+        PointField(name='intensity', offset=12, datatype=PointField.FLOAT32, count=1),
+        ]
+
+        pc_msg = pc2.create_cloud(header,fields,points)
+        self.white_line.publish(pc_msg)   
+         
+         
+    def ref_to_image(self, map_data_set):
         occ_threshold_param = 0.15  # 占有空間のしきい値
         free_threshold_param = 0.05 # 自由空間のしきい値
 
         # 0〜1スケールと仮定し100倍する
         occ_threshold = occ_threshold_param * 100  # = 
         free_threshold = free_threshold_param * 100 # = 13
-
-        # 出力配列の初期化（画像出力形式）
+        
         occupancy_grid_image = np.zeros_like(map_data_set, dtype=np.uint8)
-    
-        # 出力配列の初期化（元の値を保持したデータ形式）
         occupancy_grid_data = np.zeros_like(map_data_set, dtype=np.float32)
 
         # 処理1: 占有空間（黒: 0）
@@ -427,137 +675,8 @@ class ReflectionIntensityMap(Node):
         return binary_image
 
     def detect_edges(self, image):
-        return cv2.Canny(image, 50, 150)#50 150
-        
-    def image_to_pcd(self, image, position_x, position_y, step=1.0):
-        # ---- パラメータ定義 ----
-        resolution = 1 / self.ground_pixel  # [m/pixel]
-        origin_x = round(position_x - self.MAP_RANGE_GL + 0, 1)
-        origin_y = round(position_y - self.MAP_RANGE_GL + 14, 1)
-
-        # ---- 障害物画素の抽出 ----
-        #image_norm = cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-        #obstacle_indices = np.where(image_norm > 0)  # 非ゼロ画素（障害物）
-        obstacle_indices = np.where(image > 128)
-        if len(obstacle_indices[0]) == 0:
-            return  # 障害物がなければ処理しない
-
-        # ---- ピクセル座標 → 実空間座標変換 ----
-        obs_x = obstacle_indices[1] * resolution + origin_x  # 列方向 → X
-        obs_y = -obstacle_indices[0] * resolution + origin_y # 行方向（反転）→ Y
-        obs_z = np.zeros_like(obs_x, dtype=np.float32)       # Z軸は平面上なので0
-        #obs_intensity = image_norm[obstacle_indices].astype(np.float32)  # 画素値を強度として使う
-        obs_intensity = image[obstacle_indices].astype(np.float32)
-        # ---- 点群作成 [X, Y, Z, Intensity] ----
-        obs_matrix = np.vstack((obs_x, obs_y, obs_z, obs_intensity))
-        points = obs_matrix.T  # shape: (N, 4)
-        # ---- PointCloud2 メッセージ作成 ----
-        header = Header()
-        header.stamp = self.get_clock().now().to_msg()
-        header.frame_id = "odom"
-        
-        fields = [
-        PointField(name='x', offset=0,  datatype=PointField.FLOAT32, count=1),
-        PointField(name='y', offset=4,  datatype=PointField.FLOAT32, count=1),
-        PointField(name='z', offset=8,  datatype=PointField.FLOAT32, count=1),
-        PointField(name='intensity', offset=12, datatype=PointField.FLOAT32, count=1),
-        ]
-
-        pc_msg = pc2.create_cloud(header,fields,points)
-
-        # ---- パブリッシュ ----
-        self.white_line.publish(pc_msg)   
+        return cv2.Canny(image, 50, 150)#50 150   
     
-    
-    def classify_lines_to_pointcloud(self, image, position_x, position_y,step=1.0):
-    # Hough変換で直線を検出する
-        #self.get_logger().info("=== [1]開始 ===")
-        #lines = cv2.HoughLinesP(image, 1, np.pi / 180, threshold=50, minLineLength=40, maxLineGap=20)
-        #lines = cv2.HoughLinesP(image, 1, np.pi / 180, threshold=30, minLineLength=20, maxLineGap=30) #No1 2025.5.8
-        lines = cv2.HoughLinesP(image, 1, np.pi / 180, threshold=30, minLineLength=10, maxLineGap=30) #
-
-        #self.get_logger().info("=== [2開始 ===")
-        dotted_points = []  # 点線として分類される点のリスト
-        solid_points = []   # 実線として分類される点のリスト
-        
-        #self.get_logger().info("=== [3]開始 ===")
-        if lines is not None:
-           for line in lines:
-               x1, y1, x2, y2 = line[0]
-
-            # 線分の長さを計算
-               length = np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
-
-            # 線分を一定間隔に分割する点の数を計算
-               num_points = max(int(length / step), 2)
-
-            # 線分を等間隔に分割した点の座標を生成
-               xs = np.linspace(x1, x2, num_points)
-               ys = np.linspace(y1, y2, num_points)
-              # self.get_logger().info("=== [4]開始 ===")
-            # 各点を地図座標（m単位）に変換して分類
-            #('resolution', 1/self.ground_pixel), 
-            #('origin', [round(position_x - self.MAP_RANGE_GL, 1), round(position_y - self.MAP_RANGE_GL, 1), round(0, 1)]) 
-               resolution = 1/self.ground_pixel
-               origin_x = round(position_x - self.MAP_RANGE_GL-0.3, 1)
-               origin_y = round(position_y - self.MAP_RANGE_GL+0.15, 1)
-              # self.get_logger().info("=== [5]開始 ===")
-               for x, y in zip(xs, ys):
-                   map_x = x * resolution + origin_x
-                   map_y = (image.shape[0] - y) * resolution + origin_y
-                   map_z = 0.0
-
-                   if length < 80:
-                      dotted_points.append([map_x, map_y, map_z])
-                   else:
-                      solid_points.append([map_x, map_y, map_z])
-        #self.get_logger().info("=== [6]開始 ===")
-        # NumPyのfloat32型配列に変換
-        dotted_array = np.array(dotted_points, dtype=np.float32)
-        solid_array = np.array(solid_points, dtype=np.float32)
-        
-        #solid_array_buff
-        #if len(solid_array[0,:]) > 3:
-        #    solid_array_buff = np.insert(self.solid_array_buff, len(self.solid_array_buff[0,:]), solid_array.T, axis=1)
-        #else:
-        #    solid_array_buff = self.solid_array_buff
-        #points_round = np.round(solid_array_buff * self.ground_pixel) / self.ground_pixel
-        #self.solid_array_buff =points_round[:,~pd.DataFrame({"x":points_round[0,:], "y":points_round[1,:], "z":points_round[2,:]}).duplicated()]
-        
-        
-       #self.get_logger().info("=== [7]開始 ===")
-        # ログ出力で確認
-        self.get_logger().info(f"点線ポイント数: {len(dotted_array)}, 直線ポイント数: {len(solid_array)}")
-        self.get_logger().info(f"点線データの一部: {dotted_array[:5]}")
-        self.get_logger().info(f"直線データの一部: {solid_array[:5]}")
-
-        return dotted_array, solid_array
-        
-        
-    def publish_pointclouds(self, solid_array, dotted_array):
-        self.get_logger().info("=== [1]開始 ===")
-        fields = [
-            PointField(name='x', offset=0, datatype=PointField.FLOAT32, count=1),
-            PointField(name='y', offset=4, datatype=PointField.FLOAT32, count=1),
-            PointField(name='z', offset=8, datatype=PointField.FLOAT32, count=1),
-        ]
-
-        self.get_logger().info("=== [2]開始 ===")
-        stamp = self.get_clock().now().to_msg()
-        
-        header = Header()
-        header.stamp = self.get_clock().now().to_msg()
-        header.frame_id = "odom"
-        
-        self.get_logger().info("=== [3]開始 ===")
-        solid_pc = pc2.create_cloud(header, fields, solid_array.tolist())
-        dotted_pc = pc2.create_cloud(header, fields, dotted_array.tolist())
-        self.get_logger().info("=== [4]開始 ===")
-        self.solid_pub.publish(solid_pc)
-        self.dotted_pub.publish(dotted_pc)
-        self.get_logger().info("直線・点線の点群をパブリッシュしました")
-    
-        
     def make_ref_map(self, image, position_x, position_y, theta_z):
         map_pos_diff = math.sqrt((position_x - self.map_position_x_buff)**2 + (position_y - self.map_position_y_buff)**2)
         map_theta_diff = abs(theta_z -  self.map_theta_z_buff)
@@ -757,37 +876,37 @@ def grid_map_set(map_x, map_y, data, position, map_pixel, map_range):
     map_xy =  np.zeros([int(2* map_range * map_pixel),int(2* map_range * map_pixel)], np.uint8)
     map_data = map_xy #reflect to map#np.zeros([int(map_max_x - map_min_x),int(map_max_y - map_min_y),1], np.uint8)
     
-    print(f"map_xy ={map_xy.shape}")
-    print(f"data ={data.shape}")
-    print(f"data(map_ind) ={data[map_ind].shape}")
+    #print(f"map_xy ={map_xy.shape}")
+    #print(f"data ={data.shape}")
+    #print(f"data(map_ind) ={data[map_ind].shape}")
     
     map_data = map_data.reshape(1,len(map_xy[0,:])*len(map_xy[:,0]))
     map_data[:,:] = 0.0
     map_data_x = (map_px[map_ind] - map_range*map_pixel  ) * len(map_xy[0,:])
     map_data_y =  map_py[map_ind] - map_range*map_pixel
     map_data_xy =  list(map(int, map_data_x + map_data_y ) )
-    print(f"map_data ={map_data.shape}")
-    print(f"map_data_xy ={len(map_data_xy)}")
-    print(f"data[map_ind] ={len(data[map_ind])}")
+    #print(f"map_data ={map_data.shape}")
+    #print(f"map_data_xy ={len(map_data_xy)}")
+    #print(f"data[map_ind] ={len(data[map_ind])}")
     
     data_max = np.max(data[map_ind])
-    print(f"data_max ={data_max}")
+   # print(f"data_max ={data_max}")
     map_data_xy_max = np.max(map_data_xy)
-    print(f"map_data_xy_max ={map_data_xy_max}")
+    #print(f"map_data_xy_max ={map_data_xy_max}")
     
     
     map_data[0,map_data_xy] = data[map_ind]
     map_data_set = map_data.reshape(len(map_xy[:,0]),len(map_xy[0,:]))
     
-    print(f"map_data_set ={map_data_set.shape}")
+    #print(f"map_data_set ={map_data_set.shape}")
     
     #map flipud
     #map_xy = np.flipud(map_xy)
     map_xy = np.flipud(map_data_set)
     
     map_xy_max_ind = np.unravel_index(np.argmax(map_xy), map_xy.shape)
-    print(f"map_xy_max_ind ={map_xy_max_ind}")
-    print(f"map_xy_max ={map_xy[map_xy_max_ind]}")
+    #print(f"map_xy_max_ind ={map_xy_max_ind}")
+    #print(f"map_xy_max ={map_xy[map_xy_max_ind]}")
     
     return map_xy
 
