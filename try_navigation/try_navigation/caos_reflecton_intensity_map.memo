@@ -259,12 +259,12 @@ class ReflectionIntensityMap(Node):
         ekf_ground_set_z = ekf_ground_rot[2,:] + ekf_position[2]
         ekf_ground_set = np.vstack((ekf_ground_set_x, ekf_ground_set_y, ekf_ground_set_z))
         map_data_set_4save = grid_map_set(ekf_ground_set[1,:], ekf_ground_set[0,:], ground_reflect_conv, ekf_position, self.ground_pixel, self.MAP_RANGE)
-        #print(f"map_data_set ={map_data_set.shape}")
+        print(f"map_data_set ={map_data_set.shape}")
 	
         #GL reflect map
         #map_data_gl_set = grid_map_set(self.pcd_ground_buff[1,:], self.pcd_ground_buff[0,:], ground_reflect_conv, position, self.ground_pixel, self.MAP_RANGE_GL)
         map_data_gl_set = grid_map_set(ekf_ground_set[1,:], ekf_ground_set[0,:], ground_reflect_conv, ekf_position, self.ground_pixel, self.MAP_RANGE_GL)
-        #print(f"map_data_set ={map_data_set.shape}")
+        print(f"map_data_set ={map_data_set.shape}")
 	
         
         #publish for rviz2 
@@ -339,11 +339,23 @@ class ReflectionIntensityMap(Node):
              
             edge_image = self.detect_edges(oc_image)
           
-            #dotted_cloud, solid_cloud = self.classify_lines_to_pointcloud(edge_image, position_x, position_y, step=1.0)
+            dotted_cloud, solid_cloud = self.classify_lines_to_pointcloud(edge_image, position_x, position_y, step=1.0)
             
             self.image_to_pcd(edge_image, position_x, position_y, step=1.0)
             
-            #self.publish_pointclouds(solid_cloud, dotted_cloud)
+            self.publish_pointclouds(solid_cloud, dotted_cloud)
+            #self.publish_pointclouds(self.solid_array_buff, dotted_cloud)
+            
+            map_data_set_image_msg = self.bridge.cv2_to_imgmsg(map_data_set, encoding='mono8')
+            self.publisher_map.publish(map_data_set_image_msg)
+            binary_image_msg = self.bridge.cv2_to_imgmsg(binary_image, encoding='mono8')
+            self.publisher_binary.publish(binary_image_msg)
+            oc_image_msg = self.bridge.cv2_to_imgmsg(oc_image, encoding='mono8')
+            self.publisher_oc.publish(oc_image_msg)
+            edge_image_msg = self.bridge.cv2_to_imgmsg(edge_image, encoding='mono8')
+            self.publisher_edge.publish(edge_image_msg)
+            local_image_msg = self.bridge.cv2_to_imgmsg(reflect_map_local_set, encoding='mono8')
+            self.publisher_local.publish(local_image_msg)
             
         except Exception as e:
             self.get_logger().error(f"画像処理中にエラーが発生しました: {e}")   
@@ -538,6 +550,17 @@ class ReflectionIntensityMap(Node):
         return point_mask, peaks_r
         
     def smooth_and_find_peaks(self, data, sigma=1, height=50, distance=10, prominence=10):
+        """     
+        Parameters:
+            data (np.ndarray): 一次元配列（平均反射強度）
+            sigma (float): ガウシアンフィルタの強さ
+            height (float): ピークの最小高さ
+            distance (int): ピーク間の最小距離
+            prominence (float): 目立ち度（重要なピークだけを抽出）
+        Returns:
+            smoothed (np.ndarray): 平滑化後のデータ
+            peaks (np.ndarray): ピーク位置のインデックス
+        """
         smoothed = gaussian_filter1d(data, sigma=sigma)
         peaks, _ = find_peaks(smoothed, height=height, distance=distance, prominence=prominence)
         return smoothed, peaks
@@ -677,6 +700,69 @@ class ReflectionIntensityMap(Node):
     def detect_edges(self, image):
         return cv2.Canny(image, 50, 150)#50 150   
     
+    def classify_lines_to_pointcloud(self, image, position_x, position_y,step=1.0):
+    # Hough変換で直線を検出する
+        lines = cv2.HoughLinesP(image, 1, np.pi / 180, threshold=30, minLineLength=10, maxLineGap=30) 
+        dotted_points = []  # 点線として分類される点のリスト
+        solid_points = []   # 実線として分類される点のリスト
+        if lines is not None:
+           for line in lines:
+               x1, y1, x2, y2 = line[0]
+               length = np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+               num_points = max(int(length / step), 2)
+               xs = np.linspace(x1, x2, num_points)
+               ys = np.linspace(y1, y2, num_points)
+            # 各点を地図座標（m単位）に変換して分類
+               resolution = 1/self.ground_pixel
+               origin_x = round(position_x - self.MAP_RANGE_GL-0.3, 1)
+               origin_y = round(position_y - self.MAP_RANGE_GL+0.15, 1)
+               for x, y in zip(xs, ys):
+                   map_x = x * resolution + origin_x
+                   map_y = (image.shape[0] - y) * resolution + origin_y
+                   map_z = 0.0
+
+                   if length < 80:
+                      dotted_points.append([map_x, map_y, map_z])
+                   else:
+                      solid_points.append([map_x, map_y, map_z])
+        # NumPyのfloat32型配列に変換
+        dotted_array = np.array(dotted_points, dtype=np.float32)
+        solid_array = np.array(solid_points, dtype=np.float32)
+        
+        #solid_array_buff
+        #if len(solid_array[0,:]) > 3:
+        #    solid_array_buff = np.insert(self.solid_array_buff, len(self.solid_array_buff[0,:]), solid_array.T, axis=1)
+        #else:
+        #    solid_array_buff = self.solid_array_buff
+        #points_round = np.round(solid_array_buff * self.ground_pixel) / self.ground_pixel
+        #self.solid_array_buff =points_round[:,~pd.DataFrame({"x":points_round[0,:], "y":points_round[1,:], "z":points_round[2,:]}).duplicated()]
+        # ログ出力で確認
+        self.get_logger().info(f"点線ポイント数: {len(dotted_array)}, 直線ポイント数: {len(solid_array)}")
+        self.get_logger().info(f"点線データの一部: {dotted_array[:5]}")
+        self.get_logger().info(f"直線データの一部: {solid_array[:5]}")
+
+        return dotted_array, solid_array
+        
+        
+    def publish_pointclouds(self, solid_array, dotted_array):
+        fields = [
+            PointField(name='x', offset=0, datatype=PointField.FLOAT32, count=1),
+            PointField(name='y', offset=4, datatype=PointField.FLOAT32, count=1),
+            PointField(name='z', offset=8, datatype=PointField.FLOAT32, count=1),
+        ]
+
+        stamp = self.get_clock().now().to_msg()
+        
+        header = Header()
+        header.stamp = self.get_clock().now().to_msg()
+        header.frame_id = "odom"
+        solid_pc = pc2.create_cloud(header, fields, solid_array.tolist())
+        dotted_pc = pc2.create_cloud(header, fields, dotted_array.tolist())
+        self.solid_pub.publish(solid_pc)
+        self.dotted_pub.publish(dotted_pc)
+        self.get_logger().info("直線・点線の点群をパブリッシュしました")
+    
+        
     def make_ref_map(self, image, position_x, position_y, theta_z):
         map_pos_diff = math.sqrt((position_x - self.map_position_x_buff)**2 + (position_y - self.map_position_y_buff)**2)
         map_theta_diff = abs(theta_z -  self.map_theta_z_buff)
@@ -876,37 +962,37 @@ def grid_map_set(map_x, map_y, data, position, map_pixel, map_range):
     map_xy =  np.zeros([int(2* map_range * map_pixel),int(2* map_range * map_pixel)], np.uint8)
     map_data = map_xy #reflect to map#np.zeros([int(map_max_x - map_min_x),int(map_max_y - map_min_y),1], np.uint8)
     
-    #print(f"map_xy ={map_xy.shape}")
-    #print(f"data ={data.shape}")
-    #print(f"data(map_ind) ={data[map_ind].shape}")
+    print(f"map_xy ={map_xy.shape}")
+    print(f"data ={data.shape}")
+    print(f"data(map_ind) ={data[map_ind].shape}")
     
     map_data = map_data.reshape(1,len(map_xy[0,:])*len(map_xy[:,0]))
     map_data[:,:] = 0.0
     map_data_x = (map_px[map_ind] - map_range*map_pixel  ) * len(map_xy[0,:])
     map_data_y =  map_py[map_ind] - map_range*map_pixel
     map_data_xy =  list(map(int, map_data_x + map_data_y ) )
-    #print(f"map_data ={map_data.shape}")
-    #print(f"map_data_xy ={len(map_data_xy)}")
-    #print(f"data[map_ind] ={len(data[map_ind])}")
+    print(f"map_data ={map_data.shape}")
+    print(f"map_data_xy ={len(map_data_xy)}")
+    print(f"data[map_ind] ={len(data[map_ind])}")
     
     data_max = np.max(data[map_ind])
-   # print(f"data_max ={data_max}")
+    print(f"data_max ={data_max}")
     map_data_xy_max = np.max(map_data_xy)
-    #print(f"map_data_xy_max ={map_data_xy_max}")
+    print(f"map_data_xy_max ={map_data_xy_max}")
     
     
     map_data[0,map_data_xy] = data[map_ind]
     map_data_set = map_data.reshape(len(map_xy[:,0]),len(map_xy[0,:]))
     
-    #print(f"map_data_set ={map_data_set.shape}")
+    print(f"map_data_set ={map_data_set.shape}")
     
     #map flipud
     #map_xy = np.flipud(map_xy)
     map_xy = np.flipud(map_data_set)
     
     map_xy_max_ind = np.unravel_index(np.argmax(map_xy), map_xy.shape)
-    #print(f"map_xy_max_ind ={map_xy_max_ind}")
-    #print(f"map_xy_max ={map_xy[map_xy_max_ind]}")
+    print(f"map_xy_max_ind ={map_xy_max_ind}")
+    print(f"map_xy_max ={map_xy[map_xy_max_ind]}")
     
     return map_xy
 
