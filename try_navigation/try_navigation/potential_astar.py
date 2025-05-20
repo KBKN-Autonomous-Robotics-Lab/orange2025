@@ -70,7 +70,7 @@ class PotentialAStar(Node):
         self.pothole_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/pothole_points', self.get_pot_obs, qos_profile)
         self.right_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/curve_lines', self.get_right_obs, qos_profile)
         self.white_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/white_lines', self.get_white_obs, qos_profile)
-        #self.broken_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/broken_lines', self.get_broken_obs, qos_profile)
+        #self.dot_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/dot_lines', self.get_dot_obs, qos_profile)
         self.subscription  # 警告を回避するために設置されているだけです。削除しても挙動はかわりません。
         #self.timer = self.create_timer(0.05, self.timer_callback)
         
@@ -114,6 +114,9 @@ class PotentialAStar(Node):
         #waypoint
         self.waypoint_xy = np.array([[10],[0],[0]])
         self.waypoint_number = 0
+        self.right_number = 0
+        self.white_number = 0
+        self.dot_number = 0
         
         #map_obs
         self.map_obs_points = np.array([[],[],[]])
@@ -124,7 +127,7 @@ class PotentialAStar(Node):
         #white_obs
         self.right_obs_points = np.array([[],[],[]])
         self.white_obs_points = np.array([[],[],[]])
-        self.broken_obs_points = np.array([[],[],[]])
+        self.dot_obs_points = np.array([[],[],[]])
         
     def timer_callback(self):
         #
@@ -260,7 +263,7 @@ class PotentialAStar(Node):
         
         self.right_obs_points = np.vstack((points[0,:], points[1,:], points[2,:]))        
 
-    def get_broken_obs(self, msg):
+    def get_dot_obs(self, msg):
         #print stamp message
         t_stamp = msg.header.stamp
         #print(f"t_stamp ={t_stamp}")
@@ -269,7 +272,7 @@ class PotentialAStar(Node):
         points = self.pointcloud2_to_array(msg)
         #print(f"points ={points.shape}")
         
-        self.broken_obs_points = np.vstack((points[0,:], points[1,:], points[2,:]))
+        self.dot_obs_points = np.vstack((points[0,:], points[1,:], points[2,:]))
         
     def potential_astar(self, msg):
         
@@ -309,7 +312,7 @@ class PotentialAStar(Node):
             
         #white_obs add
         #pattern1 right lines
-        if self.waypoint_number == 0:
+        if self.waypoint_number == self.right_number:
             if len(self.right_obs_points[0,:])>0:
                 right_relative_point_x = self.right_obs_points[0,:] - self.position_x
                 right_relative_point_y = self.right_obs_points[1,:] - self.position_y
@@ -320,7 +323,7 @@ class PotentialAStar(Node):
         else:
             right_relative_point_rot = np.array([[],[],[]])
         #pattern2 all lines
-        if self.waypoint_number >= 0:        
+        if self.waypoint_number >= self.white_number:        
             if len(self.white_obs_points[0,:])>0:
                 white_relative_point_x = self.white_obs_points[0,:] - self.position_x
                 white_relative_point_y = self.white_obs_points[1,:] - self.position_y
@@ -332,16 +335,16 @@ class PotentialAStar(Node):
             white_relative_point_rot = np.array([[],[],[]])
         #pattern3 hasen
         '''
-        if self.waypoint_number > 1:     
-            if len(self.broken_obs_points[0,:])>0:
-                broken_relative_point_x = self.broken_obs_points[0,:] - self.position_x
-                broken_relative_point_y = self.broken_obs_points[1,:] - self.position_y
-                broken_relative_point = np.array((broken_relative_point_x, broken_relative_point_y, self.broken_obs_points[2,:]))
-                broken_relative_point_rot, _ = rotation_xyz(broken_relative_point, self.theta_x, self.theta_y, -self.theta_z)
+        if self.waypoint_number >= self.dot_number:     
+            if len(self.dot_obs_points[0,:])>0:
+                dot_relative_point_x = self.dot_obs_points[0,:] - self.position_x
+                dot_relative_point_y = self.dot_obs_points[1,:] - self.position_y
+                dot_relative_point = np.array((dot_relative_point_x, dot_relative_point_y, self.dot_obs_points[2,:]))
+                dot_relative_point_rot, _ = rotation_xyz(dot_relative_point, self.theta_x, self.theta_y, -self.theta_z)
             else:
-                broken_relative_point_rot = np.array([[],[],[]])
+                dot_relative_point_rot = np.array([[],[],[]])
         else:
-            broken_relative_point_rot = np.array([[],[],[]])
+            dot_relative_point_rot = np.array([[],[],[]])
         '''
         
         #obs round&duplicated  :grid_size before:28239 after100:24592 after50:8894 after10:3879
@@ -357,8 +360,8 @@ class PotentialAStar(Node):
         if white_relative_point_rot.shape[1] > 0:
             obs_points = np.insert(obs_points, len(obs_points[0,:]), white_relative_point_rot.T, axis=1)
         
-        #if broken_relative_point_rot.shape[1] > 0:
-        #    obs_points = np.insert(obs_points, len(obs_points[0,:]), broken_relative_point_rot.T, axis=1)
+        #if dot_relative_point_rot.shape[1] > 0:
+        #    obs_points = np.insert(obs_points, len(obs_points[0,:]), dot_relative_point_rot.T, axis=1)
         
         #obs_points = np.insert(obs_points, len(obs_points[0,:]), relative_point_rot.T, axis=1)
         points_round = np.round(obs_points * self.obs_pixel) / self.obs_pixel

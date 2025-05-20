@@ -277,7 +277,7 @@ class PathFollower(Node):
         if abs(target_theta)  > 90:
             speed = -0.15
         if np.any(c_obs_back) :
-            speed = -0.15
+            speed = 0.15
         
         
         
@@ -297,7 +297,7 @@ class PathFollower(Node):
             twist_msg.linear.x = speed #0.3  # 前進速度 (m/s)
             twist_msg.angular.z = target_rad_pd  # 角速度 (rad/s)
             #twist_msg.linear.x = -speed #0.3  # 前進速度 (m/s)
-            #twist_msg.angular.z = math.pi * target_rad_pd  # 角速度 (rad/s)
+            #twist_msg.angular.z = -target_rad_pd  # 角速度 (rad/s)
         else:
             twist_msg.linear.x = 0.0  # 前進速度 (m/s)
             twist_msg.angular.z = 0.0  # 角速度 (rad/s)
