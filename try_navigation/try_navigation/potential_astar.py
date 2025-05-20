@@ -320,7 +320,7 @@ class PotentialAStar(Node):
         else:
             right_relative_point_rot = np.array([[],[],[]])
         #pattern2 all lines
-        if self.waypoint_number > 1:        
+        if self.waypoint_number >= 0:        
             if len(self.white_obs_points[0,:])>0:
                 white_relative_point_x = self.white_obs_points[0,:] - self.position_x
                 white_relative_point_y = self.white_obs_points[1,:] - self.position_y
