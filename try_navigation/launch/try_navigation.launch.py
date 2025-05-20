@@ -64,12 +64,12 @@ def generate_launch_description():
         
         #waypoint manager
         # waypoint gps command
-        #Node(package='navigation_control',
-        #    executable='gps_waypoint',
-        #    name='gps_waypoint',
-        #    output='screen',
-        #    arguments=[],
-        #),
+        Node(package='navigation_control',
+            executable='gps_waypoint',
+            name='gps_waypoint',
+            output='screen',
+            arguments=[],
+        ),
         # $ ros2 run navigation_control gps_waypoint
         # file path /ros2_ws/src/Use_action/navigation_control/navigation_control/gps_waypoint
         
@@ -81,12 +81,12 @@ def generate_launch_description():
         #    arguments=[],
         #),
         #path planning
-        #Node(package='try_navigation',
-        #    executable='potential_astar',
-        #    name='potential_astar_node',
-        #    output='screen',
-        #    arguments=[],
-        #),
+        Node(package='try_navigation',
+            executable='potential_astar',
+            name='potential_astar_node',
+            output='screen',
+            arguments=[],
+        ),
         #robot ctrl
         Node(package='try_navigation',
             executable='path_follower',

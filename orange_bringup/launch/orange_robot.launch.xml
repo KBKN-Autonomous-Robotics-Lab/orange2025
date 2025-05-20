@@ -90,7 +90,7 @@
     <param name="baud" value="115200"/>
     <param name="country_id" value="0"/>
     <param name="Position_magnification" value="1.675"/>
-    <param name="heading" value="90.8"/>
+    <param name="heading" value="270.8"/>
     <param name="time_out" value="1.0"/>
   </node>
   <!-- 
