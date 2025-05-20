@@ -68,7 +68,7 @@ class PotentialAStar(Node):
         self.waypoint_number_subscription = self.create_subscription(Int32,'/waypoint_number', self.get_waypoint_number, qos_profile_sub)
         #self.subscription = self.create_subscription(sensor_msgs.PointCloud2, '/map_obs', self.get_map_obs, qos_profile)
         self.pothole_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/pothole_points', self.get_pot_obs, qos_profile)
-        self.right_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/curve_lines', self.get_right_obs, qos_profile)
+        self.right_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/right_curve', self.get_right_obs, qos_profile)
         self.white_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/white_lines', self.get_white_obs, qos_profile)
         #self.dot_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/dot_lines', self.get_dot_obs, qos_profile)
         self.subscription  # 警告を回避するために設置されているだけです。削除しても挙動はかわりません。
@@ -114,8 +114,8 @@ class PotentialAStar(Node):
         #waypoint
         self.waypoint_xy = np.array([[10],[0],[0]])
         self.waypoint_number = 0
-        self.right_number = 0
-        self.white_number = 0
+        self.right_number = 1 #human 1
+        self.white_number = 1 #human 0
         self.dot_number = 0
         
         #map_obs
@@ -312,7 +312,7 @@ class PotentialAStar(Node):
             
         #white_obs add
         #pattern1 right lines
-        if self.waypoint_number == self.right_number:
+        if self.waypoint_number >= self.right_number: # human >=
             if len(self.right_obs_points[0,:])>0:
                 right_relative_point_x = self.right_obs_points[0,:] - self.position_x
                 right_relative_point_y = self.right_obs_points[1,:] - self.position_y
@@ -323,7 +323,7 @@ class PotentialAStar(Node):
         else:
             right_relative_point_rot = np.array([[],[],[]])
         #pattern2 all lines
-        if self.waypoint_number >= self.white_number:        
+        if 0 <= self.waypoint_number <= self.white_number: # human ==
             if len(self.white_obs_points[0,:])>0:
                 white_relative_point_x = self.white_obs_points[0,:] - self.position_x
                 white_relative_point_y = self.white_obs_points[1,:] - self.position_y
