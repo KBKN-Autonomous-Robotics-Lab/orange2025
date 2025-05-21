@@ -138,7 +138,7 @@ class ReflectionIntensityMap(Node):
         
         #ground 
         self.ground_pixel = 1000/50#障害物のグリッドサイズ設定
-        self.MAP_RANGE = 7.0 #[m]15 5
+        self.MAP_RANGE = 7.0 #[m]15 5  7
         
         self.MAP_RANGE_GL = 7 #[m] 20 5 
         self.MAP_LIM_X_MIN = -7.0 #[m]-25 5 
@@ -306,11 +306,13 @@ class ReflectionIntensityMap(Node):
             
     def process(self, map_data_set, position_x, position_y, theta_z, t_stamp):
         try:
+            self.get_logger().info(f"[1] start process")
             image, image_data = self.ref_to_image(map_data_set)
             if image is None:  
                self.get_logger().error(f"Failed to load 'map_data_set' ")
                return
             #self.log_image_size(image)
+            self.get_logger().info(f"[2] image loaded and converted ")
             
             h,w=image.shape[:2]
             ############ rotate image ##################
@@ -321,21 +323,28 @@ class ReflectionIntensityMap(Node):
             reflect_map_local = self.rotate_image(image, -self.angle +90)
             reflect_map_local_cut = self.crop_center(reflect_map_local, w//2, h//2)
             reflect_map_local_set = reflect_map_local_cut.astype(np.uint8)
+            self.get_logger().info(f"[3] image rotated and cropped")
             
             local_image_msg = self.bridge.cv2_to_imgmsg(reflect_map_local_set, encoding='mono8')
             self.publisher_local.publish(local_image_msg)
             
-            bands, bands_p, sliced_height, sliced_width = list(self.slice_image(reflect_map_local_set))   
             
-            self.showgraph(bands)  
+            bands, bands_p, sliced_height, sliced_width = list(self.slice_image(reflect_map_local_set)) 
+            self.get_logger().info(f"[4] band sliced and graph shown")  
+            
+            #self.showgraph(bands)  
             peak_image, peak_r_image, peak_l_image = self.peaks_image(bands, bands_p,sliced_height, sliced_width)  
+            self.get_logger().info(f"[5] peaks detected")
+            
             reverse_angle_rad = math.radians(self.angle - 90)
             right_point, left_point = self.image_to_pcd_for_peak(peak_r_image, peak_l_image, position_x, position_y, reverse_angle_rad, step=1.0)
+            self.get_logger().info(f"[6] converted peak image to point cloud")
             
             
             #curve_points = self.generate_lines (peak_points, interval = 0.1, extend = 0.5, offset_distance=2.2, direction="right")## line theta koushin
              
             right_line,left_line = self.generate_right_left_curves(right_point, left_point, interval = 0.1, extend = 0.5)
+            self.get_logger().info(f"[7] right left line gernerated ")
             
             
             #left_line_buff publish
@@ -346,6 +355,7 @@ class ReflectionIntensityMap(Node):
             self.right_line_buff = np.insert(self.right_line_buff, len(self.right_line_buff[0,:]), right_point, axis=1)
             right_line_buff_msg = point_cloud_intensity_msg(self.right_line_buff.T, t_stamp, 'odom')
             self.pcd_right_line_buff_publisher.publish(right_line_buff_msg) 
+            self.get_logger().info(f"[8] right left buffers published")
             
             
            #right_line,left_line = self.generate_lines (right_point, left_point, interval = 0.1, extend = 0.5, offset_distance=2.2, direction="right")## line theta koushin
@@ -353,6 +363,7 @@ class ReflectionIntensityMap(Node):
             #print("角度（deg）:", np.degrees(self.angle))
             print("角度（deg）:", self.angle)
             self.publish_right_left_lines(right_line, left_line, )
+            self.get_logger().info(f"[9] right left line published")
             #self.publish_pcd(right_line)
 
 
@@ -437,13 +448,25 @@ class ReflectionIntensityMap(Node):
 
             return curve_points.astype(np.float32), np.degrees(angle_rad)
 
+        # 安全性を考慮してNoneチェックを追加
+        if points_right is None or not isinstance(points_right, np.ndarray):
+            self.get_logger().warn("右側点群がNoneまたは無効です。")
+            right_curve, self.right_angle = np.empty((0, 4), dtype=np.float32), 0.0
+        else:
+            right_curve, self.right_angle = generate_curve(points_right)
+
+        if points_left is None or not isinstance(points_left, np.ndarray):
+            self.get_logger().warn("左側点群がNoneまたは無効です。")
+            left_curve, self.left_angle = np.empty((0, 4), dtype=np.float32), 0.0
+        else:
+            left_curve, self.left_angle = generate_curve(points_left)
         # 右側の線を生成して角度を保存
-        right_curve, right_angle = generate_curve(points_right)
-        self.right_angle = right_angle
+        # right_curve, right_angle = generate_curve(points_right)
+        #self.right_angle = right_angle
 
         # 左側の線を生成して角度を保存
-        left_curve, left_angle = generate_curve(points_left)
-        self.left_angle = left_angle
+        #left_curve, left_angle = generate_curve(points_left)
+        ##self.left_angle = left_angle
 
         return right_curve, left_curve
         
@@ -502,7 +525,7 @@ class ReflectionIntensityMap(Node):
         cropped_image = image[y1:y2, x1:x2] 
         return cropped_image
         
-    def slice_image(self, image,band_height=20,num_bands=6):
+    def slice_image(self, image,band_height=20,num_bands=15):#num_bands = 6
         height, width = image.shape[:2]
         bands = []
         bands_p = []
@@ -553,33 +576,34 @@ class ReflectionIntensityMap(Node):
             smoothed, peaks = self.smooth_and_find_peaks(mean_values)
             
             y = bands_p[i]  # このバンドのY座標（元画像での高さ位置）
-
-            for x in peaks:
+            
+            for x in peaks:# for right line
                 if 0 <= x < width and 0 <= y < height:
-                    point_mask[y, x] = 255  # 対応する位置に 1 をセット
+                    point_mask[y, x] = 255  # 対応する位置に 1 をセットand (height//2) <= y < height 
                     if self.right_first:
-                       if ((width//2) + 10) <= x <= ((width//2) + 30):
+                       if ((width//2) + 10) <= x <= ((width//2) + 30) and ((height//2)-20) <= y < ((height//2)+20):
                           peaks_r_image[y, x] = 255  # 対応する位置に 1 をセット
                           self.right_peak_x = x
                           self.right_first = False
                     else:
-                       if (self.right_peak_x - 10) <= x <= (self.right_peak_x + 10):
+                       if (self.right_peak_x - 10) <= x <= (self.right_peak_x + 10) and ((height//2)-20) <= y < ((height//2)+20) :
                           peaks_r_image[y, x] = 255
                           if ((height//2) - 20 ) <= y <  ((height//2)+20 ):
                              self.right_peak_x = x
-            for x in peaks:
+            for x in peaks:# for left line
                 if 0 <= x < width and 0 <= y < height:
                     if self.left_first:
-                       if ((width//2) - 50) <= x <= ((width//2) - 20):
+                       if ((width//2) - 50) <= x <= ((width//2) - 20) and ((height//2)-20) <= y < ((height//2)+20) :
                           peaks_l_image[y, x] = 255  # 対応する位置に 1 をセット
                           self.left_peak_x = x
                           self.left_first = False
                     else:
-                       if (self.left_peak_x - 10) <= x <= (self.left_peak_x + 10):
+                       if (self.left_peak_x - 10) <= x <= (self.left_peak_x + 10) and ((height//2)-20) <= y < ((height//2)+20):
                           peaks_l_image[y, x] = 255
                           if ((height//2) - 20 ) <= y <  ((height//2)+20 ):
                              self.left_peak_x = x
-                     
+
+
                    
         return point_mask, peaks_r_image, peaks_l_image
         
