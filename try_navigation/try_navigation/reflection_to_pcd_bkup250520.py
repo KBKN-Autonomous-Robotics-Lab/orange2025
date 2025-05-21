@@ -95,8 +95,7 @@ class ReflectionIntensityMap(Node):
        # self.curve_pub = self.create_publisher(PointCloud2, 'curve_lines', 10)
         self.curve_right_pub = self.create_publisher(PointCloud2, "right_curve", 10)
         self.curve_left_pub = self.create_publisher(PointCloud2, "left_curve", 10)
-        self.pcd_right_line_buff_publisher = self.create_publisher(PointCloud2, 'line_buff_right', 10)
-        self.pcd_left_line_buff_publisher = self.create_publisher(PointCloud2, 'line_buff_left', 10)
+
 
         self.publisher_edge = self.create_publisher(Image, 'image_edge', 10)
         self.publisher_local = self.create_publisher(Image, 'image_local', 10)
@@ -109,9 +108,6 @@ class ReflectionIntensityMap(Node):
         self.right_peak_x = None
         self.left_first = True
         self.left_peak_x = None
-        
-        self.right_line_buff =  np.array([[],[],[],[]]);
-        self.left_line_buff = np.array([[],[],[],[]]);
 
         self.image_saved = False  # 画像保存フラグ（初回のみ保存する）
         #image_angle
@@ -294,7 +290,7 @@ class ReflectionIntensityMap(Node):
                  
         
         ##############################  takamori line filter  #################################
-        self.process(map_data_gl_set, position_x, position_y, theta_z, t_stamp)
+        self.process(map_data_gl_set, position_x, position_y, theta_z)
         #self.process_pgm(map_data_set, position_x, position_y)
         
          
@@ -304,7 +300,7 @@ class ReflectionIntensityMap(Node):
             #self.make_ref_map(ekf_position_x, ekf_position_y, ekf_theta_z)
             self.make_ref_map(map_data_gl_set, ekf_position_x, ekf_position_y, ekf_theta_z)
             
-    def process(self, map_data_set, position_x, position_y, theta_z, t_stamp):
+    def process(self, map_data_set, position_x, position_y, theta_z):
         try:
             image, image_data = self.ref_to_image(map_data_set)
             if image is None:  
@@ -337,17 +333,6 @@ class ReflectionIntensityMap(Node):
              
             right_line,left_line = self.generate_right_left_curves(right_point, left_point, interval = 0.1, extend = 0.5)
             
-            
-            #left_line_buff publish
-            self.left_line_buff = np.insert(self.left_line_buff, len(self.left_line_buff[0,:]), left_point, axis=1)
-            left_line_buff_msg = point_cloud_intensity_msg(self.left_line_buff.T, t_stamp, 'odom')
-            self.pcd_left_line_buff_publisher.publish(left_line_buff_msg) 
-            #right_line_buff publish
-            self.right_line_buff = np.insert(self.right_line_buff, len(self.right_line_buff[0,:]), right_point, axis=1)
-            right_line_buff_msg = point_cloud_intensity_msg(self.right_line_buff.T, t_stamp, 'odom')
-            self.pcd_right_line_buff_publisher.publish(right_line_buff_msg) 
-            
-            
            #right_line,left_line = self.generate_lines (right_point, left_point, interval = 0.1, extend = 0.5, offset_distance=2.2, direction="right")## line theta koushin
             
             #print("角度（deg）:", np.degrees(self.angle))
@@ -357,8 +342,8 @@ class ReflectionIntensityMap(Node):
 
 
             binary_image = self.binarize_image(image)
-            kernel_open = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))  
-            kernel_close = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2)) 
+            kernel_open = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))  
+            kernel_close = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)) 
             # Open → Close
             opened = cv2.morphologyEx(binary_image, cv2.MORPH_OPEN, kernel_open)
             open_close = cv2.morphologyEx(opened, cv2.MORPH_CLOSE, kernel_close)
