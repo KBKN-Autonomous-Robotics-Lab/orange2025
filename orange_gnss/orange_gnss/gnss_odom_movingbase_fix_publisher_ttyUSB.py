@@ -62,7 +62,7 @@ class GPSData(Node):
         # tkinter GUI setup
         self.root = tk.Tk()
         self.root.title("GPS Data Acquisition")
-        self.start_button = tk.Button(self.root, text="Start GPS Acquisition", command=self.start_gps_acquisition)
+        self.start_button = tk.Button(self.root, text="Start GPS Acquisition", command=self.start_gps_acquisition, width=20, height = 5)
         self.start_button.pack()
 
         self.gps_acquisition_thread = None
