@@ -170,22 +170,6 @@
     <arg name="scan_destination_topic" value="$(var merged_scan_topic)"/>
     <arg name="laserscan_topics" value="$(var hokuyo_scan_topic) $(var livox_scan_topic)"/>
   </include>-->
-  <!-- wheel_imu_odom -->
-  <node pkg="orange_sensor_tools" exec="wheel_imu_odom">
-    <param name="use_sim_time" value="$(var use_sim_time)"/>
-    <param name="imu_topic" value="$(var imu_topic)"/>
-    <param name="odom_topic" value="$(var odom_topic)"/>
-    <param name="fused_odom_topic" value="$(var fused_odom_topic)"/>
-    <param name="publish_odom" value="$(var publish_odom)"/>
-    <param name="odom_header_frame" value="odom"/>
-    <param name="odom_child_frame" value="base_footprint"/>
-    <param name="publish_TF" value="$(var publish_TF)"/>
-    <param name="TF_header_frame" value="odom"/>
-    <param name="TF_child_frame" value="base_footprint"/>
-    <param name="scale_factor" value="0.45"/>
-    <param name="pitch_difference_threshold" value="0.1"/>
-    <param name="debug" value="$(var debug_wheel_imu)"/>
-  </node>
   <!-- led_node -->
   <node pkg="orange_sensor_tools" exec="led_node">
     <param name="use_sim_time" value="$(var use_sim_time)"/>
