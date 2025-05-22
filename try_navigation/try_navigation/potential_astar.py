@@ -68,8 +68,9 @@ class PotentialAStar(Node):
         self.waypoint_number_subscription = self.create_subscription(Int32,'/waypoint_number', self.get_waypoint_number, qos_profile_sub)
         #self.subscription = self.create_subscription(sensor_msgs.PointCloud2, '/map_obs', self.get_map_obs, qos_profile)
         self.pothole_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/pothole_points', self.get_pot_obs, qos_profile)
-        self.right_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/right_curve', self.get_right_obs, qos_profile)
         self.white_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/white_lines', self.get_white_obs, qos_profile)
+        self.right_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/right_curve', self.get_right_obs, qos_profile)
+        #self.left_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/left_lines', self.get_left_obs, qos_profile)
         #self.dot_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/dot_lines', self.get_dot_obs, qos_profile)
         self.subscription  # 警告を回避するために設置されているだけです。削除しても挙動はかわりません。
         #self.timer = self.create_timer(0.05, self.timer_callback)
@@ -114,9 +115,10 @@ class PotentialAStar(Node):
         #waypoint
         self.waypoint_xy = np.array([[10],[0],[0]])
         self.waypoint_number = 0
-        self.right_number = 1 #human 1
-        self.white_number = 1 #human 0
-        self.dot_number = 0
+        self.white_number = 1 # front stop:1 lanechange:0
+        self.right_number = 0 # front stop:0 lanechange:1
+        self.left_number = 0 # front stop:None lanechange:1
+        self.dot_number = 0 # front stop:0 lanechange:0
         
         #map_obs
         self.map_obs_points = np.array([[],[],[]])
@@ -125,9 +127,50 @@ class PotentialAStar(Node):
         self.pot_obs_points = np.array([[],[],[]])
         
         #white_obs
-        self.right_obs_points = np.array([[],[],[]])
         self.white_obs_points = np.array([[],[],[]])
+        self.right_obs_points = np.array([[],[],[]])
+        self.left_obs_points = np.array([[],[],[]])
         self.dot_obs_points = np.array([[],[],[]])
+        
+        #DRIVE MODE
+        self.functions_test = 1
+        
+        #obs info for SELF DRIVE
+        self.tire_info      = 0
+        self.pothole_info   = 1
+        self.human_info     = 2
+        self.stopsign_info  = 3
+        self.whiteline_info = 4
+        self.rightline_info = 5 
+        self.leftline_info  = 6
+        self.dotline_info   = 7
+        self.obs_info = [
+            #   0       1     2        3         4         5        6       7
+            #tire pothole human stopsign whiteline rightline leftline dotline
+            (   0,      0,    0,       1,        1,        0,       0,      0), # waypoint  0 front stop
+            (   0,      0,    0,       1,        0,        1,       0,      0), # waypoint  1 front r lane
+            (   0,      0,    0,       0,        1,        0,       0,      1), # waypoint  2 curve
+            (   0,      0,    0,       0,        1,        0,       0,      1), # waypoint  3 front barrel
+            (   0,      0,    0,       0,        0,        1,       1,      0), # waypoint  4 next barrel :lanechange
+            (   0,      0,    0,       0,        0,        1,       1,      0), # waypoint  5 front barrel
+            (   0,      0,    0,       0,        0,        1,       1,      0), # waypoint  6 next barrel :lanechange
+            (   0,      0,    0,       2,        1,        0,       0,      1), # waypoint  7 front stop
+            (   0,      0,    0,       2,        0,        1,       0,      0), # waypoint  8 intersection
+            (   0,      0,    0,       0,        1,        0,       0,      0), # waypoint  9 front stop
+            (   0,      0,    1,       0,        0,        1,       0,      0), # waypoint 10 intersection :human
+            (   0,      0,    1,       0,        1,        0,       0,      0), # waypoint 11 front r lane
+            (   0,      0,    0,       0,        1,        0,       0,      1), # waypoint 12 curve
+            (   0,      0,    0,       0,        1,        0,       0,      1), # waypoint 13 front pothole
+            (   0,      1,    0,       0,        0,        1,       1,      0), # waypoint 14 next pothole :lanechange
+            (   0,      0,    0,       0,        1,        0,       0,      1), # waypoint 15 front tire
+            (   1,      0,    0,       0,        0,        1,       1,      0), # waypoint 16 next tire :lanechange
+            (   0,      0,    0,       0,        1,        0,       0,      1), # waypoint 17 curve
+            (   0,      0,    0,       3,        1,        0,       0,      1), # waypoint 18 front stop
+            (   0,      0,    0,       3,        0,        1,       0,      0), # waypoint 19 intersection
+            (   0,      0,    0,       0,        1,        0,       0,      0), # waypoint 20 front r lane
+            (   0,      0,    0,       0,        1,        0,       0,      0), # waypoint 21 GOAL!!!!!!
+        ]
+        
         
     def timer_callback(self):
         #
@@ -168,8 +211,6 @@ class PotentialAStar(Node):
         #get waypoint number
         self.waypoint_number = msg.data
         
-        
-	
     def pointcloud2_to_array(self, cloud_msg):
         available_fields = [field.name for field in cloud_msg.fields]
         
@@ -252,6 +293,17 @@ class PotentialAStar(Node):
         
         self.white_obs_points = np.vstack((points[0,:], points[1,:], points[2,:]))
 
+    def get_left_obs(self, msg):
+        #print stamp message
+        t_stamp = msg.header.stamp
+        #print(f"t_stamp ={t_stamp}")
+        
+        #get pcd data
+        points = self.pointcloud2_to_array(msg)
+        #print(f"points ={points.shape}")
+        
+        self.left_obs_points = np.vstack((points[0,:], points[1,:], points[2,:]))        
+
     def get_right_obs(self, msg):
         #print stamp message
         t_stamp = msg.header.stamp
@@ -261,7 +313,7 @@ class PotentialAStar(Node):
         points = self.pointcloud2_to_array(msg)
         #print(f"points ={points.shape}")
         
-        self.right_obs_points = np.vstack((points[0,:], points[1,:], points[2,:]))        
+        self.right_obs_points = np.vstack((points[0,:], points[1,:], points[2,:]))
 
     def get_dot_obs(self, msg):
         #print stamp message
@@ -285,6 +337,53 @@ class PotentialAStar(Node):
         #print(f"points ={points.shape}")
         print(f"self.pot_obs_points.shape = {self.pot_obs_points.shape}")
         
+        
+        position_x=self.position_x; position_y=self.position_y; 
+        theta_x=self.theta_x; theta_y=self.theta_y; theta_z=self.theta_z;
+              
+        ############ obs info #############
+        #pot_obs add(global)
+        pothole_local = np.array([[],[],[]])
+        if len(self.pot_obs_points[0,:])>0:
+            if self.obs_info[self.waypoint_number,self.pothole_info] == 1:
+                pothole_local = localization_xyz(self.pot_obs_points, position_x, position_y, theta_x, theta_y, theta_z)        
+        
+        #white_obs add(global)
+        white_line_local = np.array([[],[],[]])
+        if len(self.white_obs_points[0,:])>0: 
+            if self.functions_test == 1:
+                if self.waypoint_number >= self.white_number: # front stop >= 1, lanechange == 0
+                    white_line_local = localization_xyz(self.white_obs_points, position_x, position_y, theta_x, theta_y, theta_z)
+            elif self.obs_info[self.waypoint_number,self.whiteline_info] == 1:
+                white_line_local = localization_xyz(self.white_obs_points, position_x, position_y, theta_x, theta_y, theta_z)
+        
+        #right_obs add(global)
+        right_line_local = np.array([[],[],[]])
+        if len(self.right_obs_points[0,:])>0:
+            if self.functions_test == 1:
+                if self.waypoint_number >= self.right_number: # front stop >= 1, lanechange == 0
+                    right_line_local = localization_xyz(self.right_obs_points, position_x, position_y, theta_x, theta_y, theta_z)
+            elif self.obs_info[self.waypoint_number,self.rightline_info] == 1:
+                right_line_local = localization_xyz(self.right_obs_points, position_x, position_y, theta_x, theta_y, theta_z)
+        
+        #left_obs add(global)
+        left_line_local = np.array([[],[],[]])
+        if len(self.left_obs_points[0,:])>0:
+            if self.functions_test == 1:
+                if self.waypoint_number >= self.left_number: # front stop == 0, lanechange >= 0
+                    left_line_local = localization_xyz(self.left_obs_points, position_x, position_y, theta_x, theta_y, theta_z)
+            elif self.obs_info[self.waypoint_number,self.leftline_info] == 1:
+                left_line_local = localization_xyz(self.left_obs_points, position_x, position_y, theta_x, theta_y, theta_z)
+                
+        #dot_obs add(global)
+        dot_line_local = np.array([[],[],[]])
+        if len(self.dot_obs_points[0,:])>0:
+            if self.functions_test == 1:
+                if self.waypoint_number >= self.dot_number: # front stop >= 0, lanechange == 0
+                    dot_line_local = localization_xyz(self.dot_obs_points, position_x, position_y, theta_x, theta_y, theta_z)
+            elif self.obs_info[self.waypoint_number,self.dotline_info] == 1:
+                dot_line_local = localization_xyz(self.dot_obs_points, position_x, position_y, theta_x, theta_y, theta_z)
+        
         """
         #map_obs add
         if len(self.map_obs_points[0,:])>0:
@@ -295,73 +394,26 @@ class PotentialAStar(Node):
         else:
             relative_point_rot = np.array([[],[],[]])
         """    
-        #pot_obs add(global)
-        if len(self.pot_obs_points[0,:])>0:
-            pot_relative_point_x = self.pot_obs_points[0,:] - self.position_x
-            pot_relative_point_y = self.pot_obs_points[1,:] - self.position_y
-            pot_relative_point = np.array((pot_relative_point_x, pot_relative_point_y, self.pot_obs_points[2,:]))
-            pot_relative_point_rot, _ = rotation_xyz(pot_relative_point, self.theta_x, self.theta_y, -self.theta_z)
-        else:
-            pot_relative_point_rot = np.array([[],[],[]])
-        
-        #pot_obs add(local)
-        #if self.pot_obs_points.shape[1]>0:
-        #    relative_point_rot = self.pot_obs_points.copy()
-        #else:
-        #    relative_point_rot = np.array([[],[],[]])
-            
-        #white_obs add
-        #pattern1 right lines
-        if self.waypoint_number >= self.right_number: # human >=
-            if len(self.right_obs_points[0,:])>0:
-                right_relative_point_x = self.right_obs_points[0,:] - self.position_x
-                right_relative_point_y = self.right_obs_points[1,:] - self.position_y
-                right_relative_point = np.array((right_relative_point_x, right_relative_point_y, self.right_obs_points[2,:]))
-                right_relative_point_rot, _ = rotation_xyz(right_relative_point, self.theta_x, self.theta_y, -self.theta_z)
-            else:
-                right_relative_point_rot = np.array([[],[],[]])
-        else:
-            right_relative_point_rot = np.array([[],[],[]])
-        #pattern2 all lines
-        if 0 <= self.waypoint_number <= self.white_number: # human ==
-            if len(self.white_obs_points[0,:])>0:
-                white_relative_point_x = self.white_obs_points[0,:] - self.position_x
-                white_relative_point_y = self.white_obs_points[1,:] - self.position_y
-                white_relative_point = np.array((white_relative_point_x, white_relative_point_y, self.white_obs_points[2,:]))
-                white_relative_point_rot, _ = rotation_xyz(white_relative_point, self.theta_x, self.theta_y, -self.theta_z)
-            else:
-                white_relative_point_rot = np.array([[],[],[]])
-        else:
-            white_relative_point_rot = np.array([[],[],[]])
-        #pattern3 hasen
-        '''
-        if self.waypoint_number >= self.dot_number:     
-            if len(self.dot_obs_points[0,:])>0:
-                dot_relative_point_x = self.dot_obs_points[0,:] - self.position_x
-                dot_relative_point_y = self.dot_obs_points[1,:] - self.position_y
-                dot_relative_point = np.array((dot_relative_point_x, dot_relative_point_y, self.dot_obs_points[2,:]))
-                dot_relative_point_rot, _ = rotation_xyz(dot_relative_point, self.theta_x, self.theta_y, -self.theta_z)
-            else:
-                dot_relative_point_rot = np.array([[],[],[]])
-        else:
-            dot_relative_point_rot = np.array([[],[],[]])
-        '''
-        
+        ##################################
+                
         #obs round&duplicated  :grid_size before:28239 after100:24592 after50:8894 after10:3879
         obs_points = np.vstack((points[0,:], points[1,:], points[2,:]))
         
         # それぞれが空でなければ追加
-        if pot_relative_point_rot.shape[1] > 0:
-            obs_points = np.insert(obs_points, len(obs_points[0,:]), pot_relative_point_rot.T, axis=1)
-
-        if right_relative_point_rot.shape[1] > 0:
-            obs_points = np.insert(obs_points, len(obs_points[0,:]), right_relative_point_rot.T, axis=1)
+        if pothole_local.shape[1] > 0:
+            obs_points = np.insert(obs_points, len(obs_points[0,:]), pothole_local.T, axis=1)
+   
+        if white_line_local.shape[1] > 0:
+            obs_points = np.insert(obs_points, len(obs_points[0,:]), white_line_local.T, axis=1)
         
-        if white_relative_point_rot.shape[1] > 0:
-            obs_points = np.insert(obs_points, len(obs_points[0,:]), white_relative_point_rot.T, axis=1)
+        if right_line_local.shape[1] > 0:
+            obs_points = np.insert(obs_points, len(obs_points[0,:]), right_line_local.T, axis=1)
         
-        #if dot_relative_point_rot.shape[1] > 0:
-        #    obs_points = np.insert(obs_points, len(obs_points[0,:]), dot_relative_point_rot.T, axis=1)
+        if left_line_local.shape[1] > 0:
+            obs_points = np.insert(obs_points, len(obs_points[0,:]), left_line_local.T, axis=1)
+        
+        if dot_line_local.shape[1] > 0:
+            obs_points = np.insert(obs_points, len(obs_points[0,:]), dot_line_local.T, axis=1)
         
         #obs_points = np.insert(obs_points, len(obs_points[0,:]), relative_point_rot.T, axis=1)
         points_round = np.round(obs_points * self.obs_pixel) / self.obs_pixel
@@ -522,7 +574,16 @@ class PotentialAStar(Node):
         
         
         
-        
+
+def localization_xyz(pointcloud, position_x, position_y, theta_x, theta_y, theta_z):
+    relative_point_x = pointcloud[0,:] - position_x
+    relative_point_y = pointcloud[1,:] - position_y
+    relative_point = np.array((relative_point_x, relative_point_y, pointcloud[2,:]))
+    relative_point_rot, _ = rotation_xyz(relative_point, theta_x, theta_y, -theta_z)
+    return relative_point_rot
+
+
+
 def rotation_xyz(pointcloud, theta_x, theta_y, theta_z):
     theta_x = math.radians(theta_x)
     theta_y = math.radians(theta_y)
