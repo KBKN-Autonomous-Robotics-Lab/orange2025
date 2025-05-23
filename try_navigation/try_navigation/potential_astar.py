@@ -68,7 +68,7 @@ class PotentialAStar(Node):
         self.waypoint_number_subscription = self.create_subscription(Int32,'/waypoint_number', self.get_waypoint_number, qos_profile_sub)
         #self.subscription = self.create_subscription(sensor_msgs.PointCloud2, '/map_obs', self.get_map_obs, qos_profile)
         self.pothole_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/pothole_points', self.get_pot_obs, qos_profile)
-        self.white_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/white_lines', self.get_white_obs, qos_profile)
+        self.white_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/white_buff', self.get_white_obs, qos_profile)
         self.right_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/right_curve', self.get_right_obs, qos_profile)
         #self.left_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/left_lines', self.get_left_obs, qos_profile)
         #self.dot_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/dot_lines', self.get_dot_obs, qos_profile)
@@ -115,7 +115,7 @@ class PotentialAStar(Node):
         #waypoint
         self.waypoint_xy = np.array([[10],[0],[0]])
         self.waypoint_number = 0
-        self.white_number = 1 # front stop:1 lanechange:0 Q1:0 
+        self.white_number = 0 # front stop:1 lanechange:0 Q1:0 
         self.right_number = 0 # front stop:0 lanechange:1 Q1:0
         self.left_number = 0 # front stop:None lanechange:1 Q1:0
         self.dot_number = 0 # front stop:0 lanechange:0 Q1:0

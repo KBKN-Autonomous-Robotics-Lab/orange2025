@@ -324,7 +324,7 @@ class ReflectionIntensityMap(Node):
                return
             #self.log_image_size(image)
             #self.get_logger().info(f"[2] image loaded and converted ")
-            
+            '''
             h,w=image.shape[:2]
             ############ rotate image ##################
             
@@ -378,7 +378,7 @@ class ReflectionIntensityMap(Node):
             self.publish_right_left_lines(right_line, left_line, dotted_line)
             #self.get_logger().info(f"[9] right left line published")
             #self.publish_pcd(right_line)
-
+            '''
 
             binary_image = self.binarize_image(image)
             kernel_open = cv2.getStructuringElement(cv2.MORPH_RECT, self.kernel_open)  
@@ -390,7 +390,7 @@ class ReflectionIntensityMap(Node):
             closed_then = cv2.morphologyEx(open_close, cv2.MORPH_CLOSE, kernel_close)
             oc_image = cv2.morphologyEx(closed_then, cv2.MORPH_OPEN, kernel_open)    
              
-            edge_image = self.detect_edges(oc_image)
+            #edge_image = self.detect_edges(oc_image)
           
             #dotted_cloud, solid_cloud = self.classify_lines_to_pointcloud(edge_image, position_x, position_y, step=1.0)
             
