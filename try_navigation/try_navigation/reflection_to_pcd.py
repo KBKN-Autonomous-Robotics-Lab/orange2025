@@ -74,8 +74,8 @@ class ReflectionIntensityMap(Node):
         )
         # Subscriptionを作成。CustomMsg型,'/livox/lidar'という名前のtopicをsubscribe。
         self.subscription = self.create_subscription(sensor_msgs.PointCloud2, '/pcd_segment_ground', self.reflect_map, qos_profile)
-        self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom/wheel_imu', self.get_odom, qos_profile_sub)
-        self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom/wheel_imu', self.get_ekf_odom, qos_profile_sub)
+        self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom', self.get_odom, qos_profile_sub)
+        self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom', self.get_ekf_odom, qos_profile_sub)
         #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom_fast', self.get_odom, qos_profile_sub)
         self.subscription  # 警告を回避するために設置されているだけです。削除しても挙動はかわりません。
         self.timer = self.create_timer(0.1, self.timer_callback)
@@ -115,7 +115,9 @@ class ReflectionIntensityMap(Node):
         
         self.right_line_buff =  np.array([[],[],[],[]]);
         self.left_line_buff = np.array([[],[],[],[]]);
-        self.white_buff = np.array([[],[],[],[]]);
+        #self.white_buff = np.array([[],[],[],[]]);
+        self.white_buff = np.array([[],[],[],[],[]]);
+        self.duration = 5.0  # time for buff white_buff
 
         self.image_saved = False  # 画像保存フラグ（初回のみ保存する）
         #image_angle
@@ -169,6 +171,8 @@ class ReflectionIntensityMap(Node):
         #sliced_image
         self.num_bands=12 # the number of bands 
         self.band_height=20  #the height for each band
+        self.kernel_open = (2, 2)
+        self.kernel_close = (2, 2)
         
     def timer_callback(self):
         if self.map_data_flag > 0:
@@ -321,7 +325,7 @@ class ReflectionIntensityMap(Node):
                return
             #self.log_image_size(image)
             #self.get_logger().info(f"[2] image loaded and converted ")
-            
+            '''
             h,w=image.shape[:2]
             ############ rotate image ##################
             
@@ -375,11 +379,11 @@ class ReflectionIntensityMap(Node):
             self.publish_right_left_lines(right_line, left_line, dotted_line)
             #self.get_logger().info(f"[9] right left line published")
             #self.publish_pcd(right_line)
-
+            '''
 
             binary_image = self.binarize_image(image)
-            kernel_open = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))  
-            kernel_close = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2)) 
+            kernel_open = cv2.getStructuringElement(cv2.MORPH_RECT, self.kernel_open)  
+            kernel_close = cv2.getStructuringElement(cv2.MORPH_RECT, self.kernel_close) 
             # Open → Close
             opened = cv2.morphologyEx(binary_image, cv2.MORPH_OPEN, kernel_open)
             open_close = cv2.morphologyEx(opened, cv2.MORPH_CLOSE, kernel_close)
@@ -388,17 +392,40 @@ class ReflectionIntensityMap(Node):
             oc_image = cv2.morphologyEx(closed_then, cv2.MORPH_OPEN, kernel_open)    
              
             edge_image = self.detect_edges(oc_image)
-          
-            #dotted_cloud, solid_cloud = self.classify_lines_to_pointcloud(edge_image, position_x, position_y, step=1.0)
             
             white_point = self.image_to_pcd(oc_image, position_x, position_y, step=1.0)
+            
             #white_buff publish
-            self.white_buff = np.insert(self.white_buff, len(self.white_buff[0,:]), white_point, axis=1)
-            white_buff_msg = point_cloud_intensity_msg(self.white_buff.T, t_stamp, 'odom')
+            
+            timestamp = time.time()
+            timestamps = np.full((white_point.shape[0], 1), timestamp) #N 5
+            
+            points_with_time = np.hstack((white_point, timestamps))
+            
+            if self.white_buff.size:
+                self.white_buff = np.hstack((self.white_buff, points_with_time.T))#shape 5 N
+            else:
+                self.white_buff = points_with_time.T
+                
+            current_time = time.time()
+            mask = self.white_buff[4, :] >= current_time - self.duration
+            self.white_buff = self.white_buff[:,mask]
+            white_buff_msg = point_cloud_intensity_msg(self.white_buff[:4, :].T, t_stamp, 'odom')
+            self.white_buff_publisher.publish(white_buff_msg) 
+            '''
+            white_point_with_time = np.append(white_point, timestamp).reshape(5, 1)
+            self.white_buff = np.hstack((self.white_buff, white_point_with_time)) if self.white_buff.size else white_point_with_time
+            
+            current_time = time.time()
+            mask = self.white_buff[4, :] >= current_time - self.duration
+            self.white_buff = self.white_buff[:,mask]
+            white_buff_msg = point_cloud_intensity_msg(self.white_buff[:4, :].T, t_stamp, 'odom')
             self.white_buff_publisher.publish(white_buff_msg) 
             
-            #self.publish_pointclouds(solid_cloud, dotted_cloud)
-            
+            #self.white_buff = np.insert(self.white_buff, len(self.white_buff[0,:]), white_point, axis=1)
+            #white_buff_msg = point_cloud_intensity_msg(self.white_buff.T, t_stamp, 'odom')
+            #self.white_buff_publisher.publish(white_buff_msg) 
+            '''
         except Exception as e:
             self.get_logger().error(f"画像処理中にエラーが発生しました: {e}")   
             
