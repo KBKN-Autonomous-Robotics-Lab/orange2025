@@ -74,8 +74,8 @@ class ReflectionIntensityMap(Node):
         )
         # Subscriptionを作成。CustomMsg型,'/livox/lidar'という名前のtopicをsubscribe。
         self.subscription = self.create_subscription(sensor_msgs.PointCloud2, '/pcd_segment_ground', self.reflect_map, qos_profile)
-        self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom', self.get_odom, qos_profile_sub)
-        self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom', self.get_ekf_odom, qos_profile_sub)
+        self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom/wheel_imu', self.get_odom, qos_profile_sub)
+        self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom/wheel_imu', self.get_ekf_odom, qos_profile_sub)
         #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom_fast', self.get_odom, qos_profile_sub)
         self.subscription  # 警告を回避するために設置されているだけです。削除しても挙動はかわりません。
         self.timer = self.create_timer(0.1, self.timer_callback)
@@ -94,6 +94,7 @@ class ReflectionIntensityMap(Node):
         self.curve_left_pub = self.create_publisher(PointCloud2, "left_curve", 10)
         self.pcd_right_line_buff_publisher = self.create_publisher(PointCloud2, 'line_buff_right', 10)
         self.pcd_left_line_buff_publisher = self.create_publisher(PointCloud2, 'line_buff_left', 10)
+        self.white_buff_publisher = self.create_publisher(PointCloud2, 'white_buff', 10)
         self.curve_dotted_pub = self.create_publisher(PointCloud2, "dotted_line", 10)
 
         self.publisher_edge = self.create_publisher(Image, 'image_edge', 10)
@@ -114,7 +115,7 @@ class ReflectionIntensityMap(Node):
         
         self.right_line_buff =  np.array([[],[],[],[]]);
         self.left_line_buff = np.array([[],[],[],[]]);
-        
+        self.white_buff = np.array([[],[],[],[]]);
 
         self.image_saved = False  # 画像保存フラグ（初回のみ保存する）
         #image_angle
@@ -377,7 +378,7 @@ class ReflectionIntensityMap(Node):
 
 
             binary_image = self.binarize_image(image)
-            kernel_open = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))  
+            kernel_open = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))  
             kernel_close = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2)) 
             # Open → Close
             opened = cv2.morphologyEx(binary_image, cv2.MORPH_OPEN, kernel_open)
@@ -390,48 +391,17 @@ class ReflectionIntensityMap(Node):
           
             #dotted_cloud, solid_cloud = self.classify_lines_to_pointcloud(edge_image, position_x, position_y, step=1.0)
             
-            self.image_to_pcd(oc_image, position_x, position_y, step=1.0)
+            white_point = self.image_to_pcd(oc_image, position_x, position_y, step=1.0)
+            #white_buff publish
+            self.white_buff = np.insert(self.white_buff, len(self.white_buff[0,:]), white_point, axis=1)
+            white_buff_msg = point_cloud_intensity_msg(self.white_buff.T, t_stamp, 'odom')
+            self.white_buff_publisher.publish(white_buff_msg) 
             
             #self.publish_pointclouds(solid_cloud, dotted_cloud)
             
         except Exception as e:
             self.get_logger().error(f"画像処理中にエラーが発生しました: {e}")   
-    '''
-    def update_angle(self, max_delta=15.0, max_history=5):
-        if not hasattr(self, "angle_history"):
-            self.angle_history = deque(maxlen=max_history)
-            self.angle_source = "left"
-            self.angle = self.left_angle
-            self.get_logger().info("[angle] 初期化: left_angle を使用")
-
-        # ソース選択：leftが使えなければtheta_z、それ以外は戻さない
-        if self.angle_source == "left" and self.left_flag == 0:
-            self.angle_source = "theta"
-            self.get_logger().info("[angle] left_flag==0 → theta_z に切り替え")
-        elif self.angle_source == "theta" and self.left_flag == 1 and self.right_flag == 1:
-            self.angle_source = "left"
-            self.get_logger().info("[angle] both_flag==1 → left_angle に復帰")
-
-        # ソースに応じた角度取得
-        if self.angle_source == "left":
-            new_angle = self.left_angle
-        else:
-            new_angle = self.theta_z
-
-        self.get_logger().info(f"[angle] 使用中の角度ソース: {self.angle_source}, 値: {new_angle:.2f}°")
-
-        # 急激な変化を無視
-        if abs(new_angle - self.angle) > max_delta:
-            self.get_logger().warn(f"[angle] 急激な変化を検出 ({self.angle:.2f}° → {new_angle:.2f}°): 無視します")
-            return
-
-        # 平滑化処理（同じソースのみ）
-        self.angle_history.append(new_angle)
-        self.angle = sum(self.angle_history) / len(self.angle_history)
-        self.angle_offset = self.angle
-
-        self.get_logger().info(f"[angle] 平滑化後の角度: {self.angle:.2f}°")
-    '''
+            
     def update_angle(self, max_delta = 15.0, max_history = 5): # max_delta = 15.0
         if self.left_flag == 1 :
             if self.right_flag ==1:
@@ -812,6 +782,7 @@ class ReflectionIntensityMap(Node):
 
         pc_msg = pc2.create_cloud(header,fields,points)
         self.white_line.publish(pc_msg)   
+        return points
          
          
     def ref_to_image(self, map_data_set):
