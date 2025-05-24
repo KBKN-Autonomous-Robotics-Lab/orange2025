@@ -103,6 +103,7 @@ class ReflectionIntensityMap(Node):
         
 ########################################
         self.angle = 0.0
+        self.flag =0
         self.right_angle = 0.0
         self.left_angle = 0.0
         self.right_first = True
@@ -113,12 +114,11 @@ class ReflectionIntensityMap(Node):
         self.left_flag = 0
         self.offset = 0
         
-        self.kernel_open = (2,2)
-        self.kernel_close = (2,2)
-        
         self.right_line_buff =  np.array([[],[],[],[]]);
         self.left_line_buff = np.array([[],[],[],[]]);
-        self.white_buff = np.array([[],[],[],[]]);
+        #self.white_buff = np.array([[],[],[],[]]);
+        self.white_buff = np.array([[],[],[],[],[]]);
+        self.duration = 10.0  # time for buff white_buff
 
         self.image_saved = False  # 画像保存フラグ（初回のみ保存する）
         #image_angle
@@ -145,13 +145,13 @@ class ReflectionIntensityMap(Node):
         
         #ground 
         self.ground_pixel = 1000/50#障害物のグリッドサイズ設定
-        self.MAP_RANGE = 7.0 #[m]15 5  7
+        self.MAP_RANGE = 7.0 #[m]auto nav 7m  selfdrive:
         
-        self.MAP_RANGE_GL = 7 #[m] 20 5 
-        self.MAP_LIM_X_MIN = -7.0 #[m]-25 5 
-        self.MAP_LIM_X_MAX =  7.0 #[m]25 5
-        self.MAP_LIM_Y_MIN = -7.0 #[m]-25 5 
-        self.MAP_LIM_Y_MAX =  7.0 #[m]25 5
+        self.MAP_RANGE_GL = 7 #[m] 
+        self.MAP_LIM_X_MIN = -7.0 #[m]
+        self.MAP_LIM_X_MAX =  7.0 #[m]
+        self.MAP_LIM_Y_MIN = -7.0 #[m]
+        self.MAP_LIM_Y_MAX =  7.0 #[m]
         
         #map position
         self.map_position_x_buff = 0.0 #[m]
@@ -172,6 +172,10 @@ class ReflectionIntensityMap(Node):
         #sliced_image
         self.num_bands=12 # the number of bands 
         self.band_height=20  #the height for each band
+        self.kernel_open = (2, 2)
+        self.kernel_close = (2, 2)
+        self.map_place_x = -0 #auto nav -0 self drive  range 12  x 0
+        self.map_place_y = 14.1 # autona14 self drive   range 12 y -24.1
         
     def timer_callback(self):
         if self.map_data_flag > 0:
@@ -379,7 +383,7 @@ class ReflectionIntensityMap(Node):
             #self.get_logger().info(f"[9] right left line published")
             #self.publish_pcd(right_line)
             '''
-
+            
             binary_image = self.binarize_image(image)
             kernel_open = cv2.getStructuringElement(cv2.MORPH_RECT, self.kernel_open)  
             kernel_close = cv2.getStructuringElement(cv2.MORPH_RECT, self.kernel_close) 
@@ -390,33 +394,46 @@ class ReflectionIntensityMap(Node):
             closed_then = cv2.morphologyEx(open_close, cv2.MORPH_CLOSE, kernel_close)
             oc_image = cv2.morphologyEx(closed_then, cv2.MORPH_OPEN, kernel_open)    
              
-            #edge_image = self.detect_edges(oc_image)
-          
-            #dotted_cloud, solid_cloud = self.classify_lines_to_pointcloud(edge_image, position_x, position_y, step=1.0)
+            edge_image = self.detect_edges(oc_image)
             
             white_point = self.image_to_pcd(oc_image, position_x, position_y, step=1.0)
+            
             #white_buff publish
-            self.white_buff = np.insert(self.white_buff, len(self.white_buff[0,:]), white_point, axis=1)
-            white_buff_msg = point_cloud_intensity_msg(self.white_buff.T, t_stamp, 'odom')
+            
+            timestamp = time.time()
+            timestamps = np.full((white_point.shape[0], 1), timestamp) #N 5
+            
+            points_with_time = np.hstack((white_point, timestamps))
+            
+            if self.white_buff.size:
+                self.white_buff = np.hstack((self.white_buff, points_with_time.T))#shape 5 N
+            else:
+                self.white_buff = points_with_time.T
+                
+            current_time = time.time()
+            mask = self.white_buff[4, :] >= current_time - self.duration
+            self.white_buff = self.white_buff[:,mask]
+            white_buff_msg = point_cloud_intensity_msg(self.white_buff[:4, :].T, t_stamp, 'odom')
             self.white_buff_publisher.publish(white_buff_msg) 
             
-            #self.publish_pointclouds(solid_cloud, dotted_cloud)
+            
+            
+            #self.white_buff = np.insert(self.white_buff, len(self.white_buff[0,:]), white_point, axis=1)
+            #white_buff_msg = point_cloud_intensity_msg(self.white_buff.T, t_stamp, 'odom')
+           # self.white_buff_publisher.publish(white_buff_msg) 
             
         except Exception as e:
             self.get_logger().error(f"画像処理中にエラーが発生しました: {e}")   
             
     def update_angle(self, max_delta = 15.0, max_history = 5): # max_delta = 15.0
-        if self.left_flag == 1 :
-            if self.right_flag ==1:
-                self.angle = self.left_angle +self.offset
-            
+        
+        if self.left_flag == 1 and self.left_flag == 1:
+            self.offset = self.offset + self.left_angle
+            self.angle = self.offset
         else:
             self.angle = self.theta_z
-            if self.left_flag == 1:
-                if self.right_flag == 1:
-                    self.offset =self.theta_z
-                    self.angle = 0
-                    
+            self.offset = self.theta_z
+        
              
         #max_delta (float): 許容される最大変化量 [deg]
         #max_history (int): 平滑化に使う履歴数
@@ -456,20 +473,25 @@ class ReflectionIntensityMap(Node):
             for x in peaks:  # for right line
                 if 0 <= x < width and 0 <= y < height:
                     point_mask[y, x] = 255  # 対応する位置に 1 をセット and (height//2) <= y < height 
-                    if self.right_first:
-                        if (_w + 10) <= x <= (_w + 30) and (_h - 20) <= y < (_h + 20):
+                    if self.right_flag == 0:#self.right_first:
+                        if (_w + 10) <= x <= (_w + 30) and (_h - 40) <= y < (_h + 40):
+                            peaks_r_image[y, x] = 255 # 対応する位置に 1 をセット
                             self.right_peak_x = x
+                            #self.get_logger().info(f"self.right_peak_x : {self.right_peak_x}")
                             self.right_first = False
                     else:
                         if (self.right_peak_x - 10) <= x <= (self.right_peak_x + 10) and (_h - 20) <= y < (_h + 20):
                             peaks_r_image[y, x] = 255
                             if (_h - 20) <= y < (_h + 20):
                                 self.right_peak_x = x
+                        #else:
+                            #self.right_peak_x = None
+                            #self.right_first = True
                                 
             for x in peaks:  # for left line
                 if 0 <= x < width and 0 <= y < height:
-                    if self.left_first:
-                        if (_w - 30) <= x <= (_w - 10) and (_h - 20) <= y < (_h + 20):
+                    if self.left_flag == 0:
+                        if (_w - 30) <= x <= (_w - 10) and (_h - 40) <= y < (_h + 40):
                             peaks_l_image[y, x] = 255  # 対応する位置に 1 をセット
                             self.left_peak_x = x
                             self.left_first = False
@@ -478,7 +500,7 @@ class ReflectionIntensityMap(Node):
                             peaks_l_image[y, x] = 255
                             if (_h - 20) <= y < (_h + 20):
                                 self.left_peak_x = x
-                                
+
         return point_mask, peaks_r_image, peaks_l_image
 
 
@@ -667,7 +689,7 @@ class ReflectionIntensityMap(Node):
 
                 obstacle_indices = np.where(image > 128)
                 if len(obstacle_indices[0]) == 0:
-                    return
+                    return np.empty((0, 4), dtype=np.float32)
 
                 obs_x = obstacle_indices[1] * resolution + origin_x
                 obs_y = -obstacle_indices[0] * resolution + origin_y
@@ -753,8 +775,8 @@ class ReflectionIntensityMap(Node):
     def image_to_pcd(self, image, position_x, position_y, step=1.0):
         # ---- パラメータ定義 ----
         resolution = 1 / self.ground_pixel  # [m/pixel]
-        origin_x = round(position_x - self.MAP_RANGE_GL - 0, 1)
-        origin_y = round(position_y - self.MAP_RANGE_GL + 14, 1)
+        origin_x = round(position_x - self.MAP_RANGE_GL - self.map_place_x, 1) 
+        origin_y = round(position_y - self.MAP_RANGE_GL + self.map_place_y, 1)
 
         
         obstacle_indices = np.where(image < 128)# binary image <    #edge_image >128
