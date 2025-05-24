@@ -119,6 +119,7 @@ class ReflectionIntensityMap(Node):
         #self.white_buff = np.array([[],[],[],[]]);
         self.white_buff = np.array([[],[],[],[],[]]);
         self.duration = 5.0  # time for buff white_buff
+        self.right_x_candidates = [];
 
         self.image_saved = False  # 画像保存フラグ（初回のみ保存する）
         #image_angle
@@ -145,13 +146,13 @@ class ReflectionIntensityMap(Node):
         
         #ground 
         self.ground_pixel = 1000/50#障害物のグリッドサイズ設定
-        self.MAP_RANGE = 7.0 #[m]auto nav 7m  selfdrive:12
+        self.MAP_RANGE = 12.0 #[m]auto nav 7m  selfdrive:12
         
-        self.MAP_RANGE_GL = 7 #[m] 
-        self.MAP_LIM_X_MIN = -7.0 #[m]
-        self.MAP_LIM_X_MAX =  7.0 #[m]
-        self.MAP_LIM_Y_MIN = -7.0 #[m]
-        self.MAP_LIM_Y_MAX =  7.0 #[m]
+        self.MAP_RANGE_GL = 12 #[m] 
+        self.MAP_LIM_X_MIN = -12.0 #[m]
+        self.MAP_LIM_X_MAX =  12.0 #[m]
+        self.MAP_LIM_Y_MIN = -12.0 #[m]
+        self.MAP_LIM_Y_MAX =  12.0 #[m]
         
         #map position
         self.map_position_x_buff = 0.0 #[m]
@@ -175,7 +176,7 @@ class ReflectionIntensityMap(Node):
         self.kernel_open = (2, 2)
         self.kernel_close = (2, 2)
         self.map_place_x = -0 #auto nav -0 self drive  range 12  x 0
-        self.map_place_y = 14.1 # autona14 self drive   range 12 y 24.1
+        self.map_place_y = 24.1 # autona14 self drive   range 12 y 24.1
         
     def timer_callback(self):
         if self.map_data_flag > 0:
@@ -328,7 +329,7 @@ class ReflectionIntensityMap(Node):
                return
             #self.log_image_size(image)
             #self.get_logger().info(f"[2] image loaded and converted ")
-            '''
+            
             h,w=image.shape[:2]
             ############ rotate image ##################
             
@@ -382,7 +383,7 @@ class ReflectionIntensityMap(Node):
             self.publish_right_left_lines(right_line, left_line, dotted_line)
             #self.get_logger().info(f"[9] right left line published")
             #self.publish_pcd(right_line)
-            '''
+            
             
             binary_image = self.binarize_image(image)
             kernel_open = cv2.getStructuringElement(cv2.MORPH_RECT, self.kernel_open)  
@@ -428,10 +429,11 @@ class ReflectionIntensityMap(Node):
     def update_angle(self, max_delta = 15.0, max_history = 5): # max_delta = 15.0
         
         if self.left_flag == 1 and self.left_flag == 1:
-            self.angle = self.angle + self.left_angle
+            self.offset = self.offset + self.left_angle
+            self.angle = self.offset
         else:
             self.angle = self.theta_z
-            
+            self.offset = self.theta_z
         
              
         #max_delta (float): 許容される最大変化量 [deg]
@@ -451,8 +453,7 @@ class ReflectionIntensityMap(Node):
      #   self.angle = sum(self.angle_history) / len(self.angle_history)
         #self.angle_offset = self.angle_offset + self.angle
      #   self.angle_offset = self.angle
-    
-
+   
     def peaks_image(self, bands, bands_p, height, width):
         # 元画像サイズのマスク画像を作成（初期値0）
         point_mask = np.zeros((height, width), dtype=np.uint8)
@@ -472,25 +473,20 @@ class ReflectionIntensityMap(Node):
             for x in peaks:  # for right line
                 if 0 <= x < width and 0 <= y < height:
                     point_mask[y, x] = 255  # 対応する位置に 1 をセット and (height//2) <= y < height 
-                    if self.right_flag == 0:#self.right_first:
-                        if (_w + 10) <= x <= (_w + 30) and (_h - 40) <= y < (_h + 40):
-                            peaks_r_image[y, x] = 255 # 対応する位置に 1 をセット
+                    if self.right_first:
+                        if (_w + 10) <= x <= (_w + 30) and (_h - 20) <= y < (_h + 20):
                             self.right_peak_x = x
-                            #self.get_logger().info(f"self.right_peak_x : {self.right_peak_x}")
                             self.right_first = False
                     else:
                         if (self.right_peak_x - 10) <= x <= (self.right_peak_x + 10) and (_h - 20) <= y < (_h + 20):
                             peaks_r_image[y, x] = 255
                             if (_h - 20) <= y < (_h + 20):
                                 self.right_peak_x = x
-                        #else:
-                            #self.right_peak_x = None
-                            #self.right_first = True
                                 
             for x in peaks:  # for left line
                 if 0 <= x < width and 0 <= y < height:
-                    if self.left_flag == 0:
-                        if (_w - 30) <= x <= (_w - 10) and (_h - 40) <= y < (_h + 40):
+                    if self.left_first:
+                        if (_w - 30) <= x <= (_w - 10) and (_h - 20) <= y < (_h + 20):
                             peaks_l_image[y, x] = 255  # 対応する位置に 1 をセット
                             self.left_peak_x = x
                             self.left_first = False
@@ -499,7 +495,7 @@ class ReflectionIntensityMap(Node):
                             peaks_l_image[y, x] = 255
                             if (_h - 20) <= y < (_h + 20):
                                 self.left_peak_x = x
-
+                                
         return point_mask, peaks_r_image, peaks_l_image
 
 

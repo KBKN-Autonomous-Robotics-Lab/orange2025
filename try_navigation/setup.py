@@ -59,7 +59,8 @@ setup(
             'map_check = try_navigation.map_check:main',
             'line_filter = try_navigation.line_filter:main',
             'pcd_line_filter = try_navigation.pcd_line_filter:main',
-            'reflection_to_pcd = try_navigation.reflection_to_pcd:main'
+            'reflection_to_pcd = try_navigation.reflection_to_pcd:main',
+            'self_drive_line = try_navigation.self_drive_line:main'
         ],
     },
 )
