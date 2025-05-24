@@ -18,7 +18,7 @@ OdomFusionNode::OdomFusionNode() : Node("wheel_imu_odom")
   debug_ = this->declare_parameter<bool>("debug", false);
 
   imu_sub_ = this->create_subscription<sensor_msgs::msg::Imu>(
-    imu_topic_, 10, std::bind(&OdomFusionNode::imuCallback, this, std::placeholders::_1));
+    imu_topic_, 1, std::bind(&OdomFusionNode::imuCallback, this, std::placeholders::_1));
   odom_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
     odom_topic_, 1, std::bind(&OdomFusionNode::odomCallback, this, std::placeholders::_1));
   fused_odom_pub_ = this->create_publisher<nav_msgs::msg::Odometry>(fused_odom_topic_, 1);
