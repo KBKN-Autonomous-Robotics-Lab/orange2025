@@ -587,7 +587,8 @@ class ReflectionIntensityMap(Node):
         if points_right is None or points_right.shape[0]<3:
             #self.get_logger().warn("右側点群がNoneまたは無効です。")
             #right_curve, self.right_angle = np.empty((0, 4), dtype=np.float32), 0.0
-            right_curve, old_right_angle = np.empty((0, 4), dtype=np.float32), 0.0
+            right_curve, right_angle_generate = np.empty((0, 4), dtype=np.float32), 0.0
+            self.right_angle = right_angle_generate
             dotted_curve = np.empty((0, 4), dtype=np.float32)
             self.right_flag = 0
         else:
