@@ -68,6 +68,7 @@ class PotentialAStar(Node):
         self.waypoint_number_subscription = self.create_subscription(Int32,'/waypoint_number', self.get_waypoint_number, qos_profile_sub)
         #self.subscription = self.create_subscription(sensor_msgs.PointCloud2, '/map_obs', self.get_map_obs, qos_profile)
         self.pothole_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/pothole_points', self.get_pot_obs, qos_profile)
+        self.tire_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/tire_points', self.get_tire_obs, qos_profile)
         self.white_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/white_buff', self.get_white_obs, qos_profile)
         self.right_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/right_curve', self.get_right_obs, qos_profile)
         #self.left_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/left_lines', self.get_left_obs, qos_profile)
@@ -115,6 +116,7 @@ class PotentialAStar(Node):
         #waypoint
         self.waypoint_xy = np.array([[10],[0],[0]])
         self.waypoint_number = 0
+        self.pothole_number = 0 #functions test
         self.white_number = 0 # front stop:1 lanechange:0 Q1:0 
         self.right_number = 0 # front stop:0 lanechange:1 Q1:0
         self.left_number = 0 # front stop:None lanechange:1 Q1:0
@@ -125,6 +127,9 @@ class PotentialAStar(Node):
         
         #pot_obs
         self.pot_obs_points = np.array([[],[],[]])
+        
+        #tire_obs
+        self.tire_obs_points = np.array([[],[],[]])
         
         #white_obs
         self.white_obs_points = np.array([[],[],[]])
@@ -271,7 +276,7 @@ class PotentialAStar(Node):
         self.map_obs_points = np.vstack((points[0,:], points[1,:], points[2,:]))
         
     def get_pot_obs(self, msg):
-        print("pothole_points received")
+        #print("pothole_points received")
         #print stamp message
         t_stamp = msg.header.stamp
         #print(f"t_stamp ={t_stamp}")
@@ -281,6 +286,18 @@ class PotentialAStar(Node):
         #print(f"points ={points.shape}")
         
         self.pot_obs_points = np.vstack((points[0,:], points[1,:], points[2,:]))
+    
+    def get_tire_obs(self, msg):
+        #print("pothole_points received")
+        #print stamp message
+        t_stamp = msg.header.stamp
+        #print(f"t_stamp ={t_stamp}")
+        
+        #get pcd data
+        points = self.pointcloud2_to_array(msg)
+        #print(f"points ={points.shape}")
+        
+        self.tire_obs_points = np.vstack((points[0,:], points[1,:], points[2,:]))
         
     def get_white_obs(self, msg):
         #print stamp message
@@ -345,8 +362,17 @@ class PotentialAStar(Node):
         #pot_obs add(global)
         pothole_local = np.array([[],[],[]])
         if len(self.pot_obs_points[0,:])>0:
-            if self.obs_info[self.waypoint_number,self.pothole_info] == 1:
-                pothole_local = localization_xyz(self.pot_obs_points, position_x, position_y, theta_x, theta_y, theta_z)        
+            if self.functions_test == 1:
+                if self.waypoint_number >= self.pothole_number: # front stop >= 1, lanechange == 0
+                    pothole_local = localization_xyz(self.pot_obs_points, position_x, position_y, theta_x, theta_y, theta_z)
+            elif self.obs_info[self.waypoint_number,self.pothole_info] == 1:
+                pothole_local = localization_xyz(self.pot_obs_points, position_x, position_y, theta_x, theta_y, theta_z)  
+        
+        #tire_obs add(global)
+        tire_local = np.array([[],[],[]])
+        if len(self.tire_obs_points[0,:])>0:
+            if self.obs_info[self.waypoint_number,self.tire_info] == 1:
+                tire_local = localization_xyz(self.tire_obs_points, position_x, position_y, theta_x, theta_y, theta_z)      
         
         #white_obs add(global)
         white_line_local = np.array([[],[],[]])
@@ -394,7 +420,7 @@ class PotentialAStar(Node):
         else:
             relative_point_rot = np.array([[],[],[]])
         """    
-        ##################################
+        ###################################
                 
         #obs round&duplicated  :grid_size before:28239 after100:24592 after50:8894 after10:3879
         obs_points = np.vstack((points[0,:], points[1,:], points[2,:]))
@@ -402,6 +428,9 @@ class PotentialAStar(Node):
         # それぞれが空でなければ追加
         if pothole_local.shape[1] > 0:
             obs_points = np.insert(obs_points, len(obs_points[0,:]), pothole_local.T, axis=1)
+            
+        if tire_local.shape[1] > 0:
+            obs_points = np.insert(obs_points, len(obs_points[0,:]), tire_local.T, axis=1)
    
         if white_line_local.shape[1] > 0:
             obs_points = np.insert(obs_points, len(obs_points[0,:]), white_line_local.T, axis=1)
