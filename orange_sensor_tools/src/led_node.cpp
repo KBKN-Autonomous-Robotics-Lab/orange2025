@@ -27,7 +27,7 @@ LedController::LedController()
         nav_topic_, 10, std::bind(&LedController::navCallback, this, std::placeholders::_1));
     estop_sub_ = this->create_subscription<std_msgs::msg::Bool>(
         estop_topic_, 10, std::bind(&LedController::estopCallback, this, std::placeholders::_1));
-    timer_ = this->create_wall_timer(200ms, std::bind(&LedController::sendSerialCommand, this));
+    timer_ = this->create_wall_timer(500ms, std::bind(&LedController::sendSerialCommand, this));
 
     if (serial_port_.isOpen())
     {

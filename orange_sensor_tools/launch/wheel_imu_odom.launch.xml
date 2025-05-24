@@ -5,7 +5,7 @@
   <arg name="odom_topic" default="/odom"/>
   <arg name="fused_odom_topic" default="/odom/wheel_imu"/>
   <arg name="publish_odom" default="true"/>
-  <arg name="publish_TF" default="false"/>
+  <arg name="publish_TF" default="true"/>
   <arg name="debug_wheel_imu" default="false"/>
 
   <!-- wheel_imu_odom -->
