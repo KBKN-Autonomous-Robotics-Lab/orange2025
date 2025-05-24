@@ -177,6 +177,7 @@ class ReflectionIntensityMap(Node):
         self.kernel_close = (2, 2)
         self.map_place_x = -0 #auto nav -0 self drive  range 12  x 0
         self.map_place_y = 24.1 # autona14 self drive   range 12 y 24.1
+        self.points_right_history = deque(maxlen=20)
         
     def timer_callback(self):
         if self.map_data_flag > 0:
@@ -360,7 +361,7 @@ class ReflectionIntensityMap(Node):
             
             #curve_points = self.generate_lines (peak_points, interval = 0.1, extend = 0.5, offset_distance=2.2, direction="right")## line theta koushin
              
-            right_line,left_line, dotted_line = self.generate_right_left_curves(right_point, left_point, interval = 0.1, extend = 0.5, parallel_offset = 2)
+            right_line,left_line, dotted_line = self.generate_right_left_curves(right_point, left_point, interval = 0.1, extend = 0.5, parallel_offset = 3)
 
             #self.get_logger().info(f"[7] right left line gernerated ")
             
@@ -490,7 +491,7 @@ class ReflectionIntensityMap(Node):
             for x in peaks:  # for left line
                 if 0 <= x < width and 0 <= y < height:
                     if self.left_first:
-                        if (_w - 30) <= x <= (_w - 10) and (_h - 20) <= y < (_h + 20):
+                        if 0 <= x <= (_w - 20) and (_h - 20) <= y < (_h + 20):
                             peaks_l_image[y, x] = 255  # 対応する位置に 1 をセット
                             self.left_peak_x = x
                             self.left_first = False
@@ -592,10 +593,16 @@ class ReflectionIntensityMap(Node):
             dotted_curve = np.empty((0, 4), dtype=np.float32)
             self.right_flag = 0
         else:
-            #right_curve, self.right_angle = generate_curve(points_right)
-            right_curve, right_angle_generate = generate_curve(points_right)
+            self.points_right_history.append(points_right)
+            right_combined = np.vstack(self.points_right_history)
+            right_curve, right_angle_generate = generate_curve(right_combined)
+            #right_curve, right_angle_generate = generate_curve(points_right)
             self.right_angle = right_angle_generate
+            
             dotted_curve = generate_parallel_curve(right_curve, parallel_offset)
+            #print("right_points",right_points)
+            #print("right_conbined",right_combined)
+           
             self.right_flag += 1
 
         #if points_left is None or not isinstance(points_left, np.ndarray):
