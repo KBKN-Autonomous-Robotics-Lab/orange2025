@@ -51,7 +51,7 @@ class ReflectionIntensityMap(Node):
     # コンストラクタです、クラスのインスタンスを作成する際に呼び出されます。
     def __init__(self):
         # 継承元のクラスを初期化します。（https://www.python-izm.com/advanced/class_extend/）今回の場合継承するクラスはNodeになります。
-        super().__init__('reflection_intensity_map_node')
+        super().__init__('self_drive_line_node')
         
         qos_profile = QoSProfile(
             history=QoSHistoryPolicy.KEEP_LAST,
@@ -118,7 +118,7 @@ class ReflectionIntensityMap(Node):
         self.left_line_buff = np.array([[],[],[],[]]);
         #self.white_buff = np.array([[],[],[],[]]);
         self.white_buff = np.array([[],[],[],[],[]]);
-        self.duration = 10.0  # time for buff white_buff
+        self.duration = 3.0  # time for buff white_buff
         self.right_x_candidates = [];
 
         self.image_saved = False  # 画像保存フラグ（初回のみ保存する）
@@ -349,7 +349,7 @@ class ReflectionIntensityMap(Node):
             bands, bands_p, sliced_height, sliced_width = list(self.slice_image(reflect_map_local_set, self.band_height, self.num_bands)) 
            # self.get_logger().info(f"[4] band sliced and graph shown")  
             
-            self.showgraph(bands)  
+            #self.showgraph(bands)  
             peak_image, peak_r_image, peak_l_image = self.peaks_image(bands, bands_p,sliced_height, sliced_width)  
             #self.get_logger().info(f"[5] peaks detected")
             

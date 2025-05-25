@@ -70,9 +70,9 @@ class PotentialAStar(Node):
         #self.pothole_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/pothole_points', self.get_pot_obs, qos_profile)
         #self.tire_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/tire_points', self.get_tire_obs, qos_profile)
         self.white_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/white_buff', self.get_white_obs, qos_profile)
-        #self.right_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/line_buff_right', self.get_right_obs, qos_profile)
-        #self.left_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/line_buff_left', self.get_left_obs, qos_profile)
-        #self.dot_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/dotted_lines', self.get_dot_obs, qos_profile)
+        self.right_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/line_buff_right', self.get_right_obs, qos_profile)
+        self.left_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/line_buff_left', self.get_left_obs, qos_profile)
+        self.dot_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/dotted_line', self.get_dot_obs, qos_profile)
         self.subscription  # 警告を回避するために設置されているだけです。削除しても挙動はかわりません。
         #self.timer = self.create_timer(0.05, self.timer_callback)
         
@@ -152,28 +152,28 @@ class PotentialAStar(Node):
         self.obs_info = [
             #   0       1     2        3         4         5        6       7
             #tire pothole human stopsign whiteline rightline leftline dotline
-            (   0,      0,    0,       1,        1,        0,       0,      0), # waypoint  0 front stop
-            (   0,      0,    0,       1,        0,        1,       0,      0), # waypoint  1 front r lane
-            (   0,      0,    0,       0,        1,        0,       0,      1), # waypoint  2 curve
-            (   0,      0,    0,       0,        1,        0,       0,      1), # waypoint  3 front barrel
-            (   0,      0,    0,       0,        0,        1,       1,      0), # waypoint  4 next barrel :lanechange
-            (   0,      0,    0,       0,        0,        1,       1,      0), # waypoint  5 front barrel
-            (   0,      0,    0,       0,        0,        1,       1,      0), # waypoint  6 next barrel :lanechange
-            (   0,      0,    0,       2,        1,        0,       0,      1), # waypoint  7 front stop
-            (   0,      0,    0,       2,        0,        1,       0,      0), # waypoint  8 intersection
-            (   0,      0,    0,       0,        1,        0,       0,      0), # waypoint  9 front stop
-            (   0,      0,    1,       0,        0,        1,       0,      0), # waypoint 10 intersection :human
-            (   0,      0,    1,       0,        1,        0,       0,      0), # waypoint 11 front r lane
-            (   0,      0,    0,       0,        1,        0,       0,      1), # waypoint 12 curve
-            (   0,      0,    0,       0,        1,        0,       0,      1), # waypoint 13 front pothole
-            (   0,      1,    0,       0,        0,        1,       1,      0), # waypoint 14 next pothole :lanechange
-            (   0,      0,    0,       0,        1,        0,       0,      1), # waypoint 15 front tire
-            (   1,      0,    0,       0,        0,        1,       1,      0), # waypoint 16 next tire :lanechange
-            (   0,      0,    0,       0,        1,        0,       0,      1), # waypoint 17 curve
-            (   0,      0,    0,       3,        1,        0,       0,      1), # waypoint 18 front stop
-            (   0,      0,    0,       3,        0,        1,       0,      0), # waypoint 19 intersection
-            (   0,      0,    0,       0,        1,        0,       0,      0), # waypoint 20 front r lane
-            (   0,      0,    0,       0,        1,        0,       0,      0), # waypoint 21 GOAL!!!!!!
+            [   0,      0,    0,       1,        1,        0,       0,      0], # waypoint  0 front stop
+            [   0,      0,    0,       1,        0,        1,       0,      0], # waypoint  1 front r lane
+            [   0,      0,    0,       0,        1,        0,       0,      1], # waypoint  2 curve
+            [   0,      0,    0,       0,        1,        0,       0,      1], # waypoint  3 front barrel
+            [   0,      0,    0,       0,        0,        1,       1,      0], # waypoint  4 next barrel :lanechange
+            [   0,      0,    0,       0,        0,        1,       1,      0], # waypoint  5 front barrel
+            [   0,      0,    0,       0,        0,        1,       1,      0], # waypoint  6 next barrel :lanechange
+            [   0,      0,    0,       2,        1,        0,       0,      1], # waypoint  7 front stop
+            [   0,      0,    0,       2,        0,        1,       0,      0], # waypoint  8 intersection
+            [   0,      0,    0,       0,        1,        0,       0,      0], # waypoint  9 front stop
+            [   0,      0,    1,       0,        0,        1,       0,      0], # waypoint 10 intersection :human
+            [   0,      0,    1,       0,        1,        0,       0,      0], # waypoint 11 front r lane
+            [   0,      0,    0,       0,        1,        0,       0,      1], # waypoint 12 curve
+            [   0,      0,    0,       0,        1,        0,       0,      1], # waypoint 13 front pothole
+            [   0,      1,    0,       0,        0,        1,       1,      0], # waypoint 14 next pothole :lanechange
+            [   0,      0,    0,       0,        1,        0,       0,      1], # waypoint 15 front tire
+            [   1,      0,    0,       0,        0,        1,       1,      0], # waypoint 16 next tire :lanechange
+            [   0,      0,    0,       0,        1,        0,       0,      1], # waypoint 17 curve
+            [   0,      0,    0,       3,        1,        0,       0,      1], # waypoint 18 front stop
+            [   0,      0,    0,       3,        0,        1,       0,      0], # waypoint 19 intersection
+            [   0,      0,    0,       0,        1,        0,       0,      0], # waypoint 20 front r lane
+            [   0,      0,    0,       0,        1,        0,       0,      0]  # waypoint 21 GOAL!!!!!!
         ]
         
         
@@ -365,13 +365,13 @@ class PotentialAStar(Node):
             if self.functions_test == 1:
                 if self.waypoint_number >= self.pothole_number: # front stop >= 1, lanechange == 0
                     pothole_local = localization_xyz(self.pot_obs_points, position_x, position_y, theta_x, theta_y, theta_z)
-            elif self.obs_info[self.waypoint_number,self.pothole_info] == 1:
+            elif self.obs_info[self.waypoint_number][self.pothole_info] == 1:
                 pothole_local = localization_xyz(self.pot_obs_points, position_x, position_y, theta_x, theta_y, theta_z)  
         
         #tire_obs add(global)
         tire_local = np.array([[],[],[]])
         if len(self.tire_obs_points[0,:])>0:
-            if self.obs_info[self.waypoint_number,self.tire_info] == 1:
+            if self.obs_info[self.waypoint_number][self.tire_info] == 1:
                 tire_local = localization_xyz(self.tire_obs_points, position_x, position_y, theta_x, theta_y, theta_z)      
         
         #white_obs add(global)
@@ -380,7 +380,7 @@ class PotentialAStar(Node):
             if self.functions_test == 1:
                 if self.waypoint_number >= self.white_number: # front stop >= 1, lanechange == 0
                     white_line_local = localization_xyz(self.white_obs_points, position_x, position_y, theta_x, theta_y, theta_z)
-            elif self.obs_info[self.waypoint_number,self.whiteline_info] == 1:
+            elif self.obs_info[self.waypoint_number][self.whiteline_info] == 1:
                 white_line_local = localization_xyz(self.white_obs_points, position_x, position_y, theta_x, theta_y, theta_z)
         
         #right_obs add(global)
@@ -389,7 +389,7 @@ class PotentialAStar(Node):
             if self.functions_test == 1:
                 if self.waypoint_number >= self.right_number: # front stop >= 1, lanechange == 0
                     right_line_local = localization_xyz(self.right_obs_points, position_x, position_y, theta_x, theta_y, theta_z)
-            elif self.obs_info[self.waypoint_number,self.rightline_info] == 1:
+            elif self.obs_info[self.waypoint_number][self.rightline_info] == 1:
                 right_line_local = localization_xyz(self.right_obs_points, position_x, position_y, theta_x, theta_y, theta_z)
         
         #left_obs add(global)
@@ -398,7 +398,7 @@ class PotentialAStar(Node):
             if self.functions_test == 1:
                 if self.waypoint_number >= self.left_number: # front stop == 0, lanechange >= 0
                     left_line_local = localization_xyz(self.left_obs_points, position_x, position_y, theta_x, theta_y, theta_z)
-            elif self.obs_info[self.waypoint_number,self.leftline_info] == 1:
+            elif self.obs_info[self.waypoint_number][self.leftline_info] == 1:
                 left_line_local = localization_xyz(self.left_obs_points, position_x, position_y, theta_x, theta_y, theta_z)
                 
         #dot_obs add(global)
@@ -407,7 +407,7 @@ class PotentialAStar(Node):
             if self.functions_test == 1:
                 if self.waypoint_number >= self.dot_number: # front stop >= 0, lanechange == 0
                     dot_line_local = localization_xyz(self.dot_obs_points, position_x, position_y, theta_x, theta_y, theta_z)
-            elif self.obs_info[self.waypoint_number,self.dotline_info] == 1:
+            elif self.obs_info[self.waypoint_number][self.dotline_info] == 1:
                 dot_line_local = localization_xyz(self.dot_obs_points, position_x, position_y, theta_x, theta_y, theta_z)
         
         """
