@@ -51,7 +51,7 @@ class ReflectionIntensityMap(Node):
     # コンストラクタです、クラスのインスタンスを作成する際に呼び出されます。
     def __init__(self):
         # 継承元のクラスを初期化します。（https://www.python-izm.com/advanced/class_extend/）今回の場合継承するクラスはNodeになります。
-        super().__init__('reflection_intensity_map_node')
+        super().__init__('self_drive_line_node')
         
         qos_profile = QoSProfile(
             history=QoSHistoryPolicy.KEEP_LAST,
