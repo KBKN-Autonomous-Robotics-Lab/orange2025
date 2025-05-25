@@ -40,8 +40,8 @@ class PathFollower(Node):
         
         # Subscriptionを作成。
         self.subscription = self.create_subscription(nav_msgs.Path, '/potential_astar_path', self.get_path, qos_profile) #set subscribe pcd topic name
-        #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom_wheel', self.get_odom, qos_profile_sub)
-        self.subscription = self.create_subscription(nav_msgs.Odometry,'/fusion/odom', self.get_odom, qos_profile_sub)
+        self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom/wheel_imu', self.get_odom, qos_profile_sub)
+        #self.subscription = self.create_subscription(nav_msgs.Odometry,'/fusion/odom', self.get_odom, qos_profile_sub)
         #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom_ekf_match', self.get_odom, qos_profile_sub)
         #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom_ref_slam', self.get_odom_ref, qos_profile_sub)
         self.subscription = self.create_subscription(sensor_msgs.PointCloud2, '/pcd_segment_obs', self.obs_steer, qos_profile)
@@ -183,10 +183,12 @@ class PathFollower(Node):
         path_target_ind_sort = np.argsort(path_diff_target_dist)[:4] #check 4point
         target_ind = np.max(path_target_ind_sort)
         target_point = path[:,target_ind]
+        reverse_theta_z = (theta_z + 180) % 360
         relative_point_x = target_point[0] - position_x
         relative_point_y = target_point[1] - position_y
         relative_point = np.vstack((relative_point_x, relative_point_y, target_point[2]))
         relative_point_rot, t_point_rot_matrix = rotation_xyz(relative_point, theta_x, theta_y, -theta_z)
+        #relative_point_rot, t_point_rot_matrix = rotation_xyz(relative_point, theta_x, theta_y, -reverse_theta_z)
         target_rad = math.atan2(relative_point_rot[1], relative_point_rot[0])
         target_theta = (target_rad) * (180 / math.pi)
         
@@ -209,20 +211,20 @@ class PathFollower(Node):
         c_obs_back = ( -50<obs_theta) * (obs_theta<  50) * (obs_dist<0.4)
         
         if np.any(r_obs) and np.any(l_obs) and ~np.any(c_obs) :
-            speed = 0.3
+            speed = 0.25
             #target_theta = 0
             #target_rad = target_theta/180*math.pi
             target_rad, target_theta = self.set_target_rad(path, position_x, position_y, self.target_dist_near, theta_x, theta_y, theta_z)
             #self.get_logger().info('||||||||||| center |||||||||||||||||')
         elif np.any(r_obs) and ~np.any(c_obs) :
-            speed = 0.15
+            speed = 0.10
             target_rad, target_theta = self.set_target_rad(path, position_x, position_y, self.target_dist_near, theta_x, theta_y, theta_z)
             #if target_theta < 0:
             #    target_theta = 0.0#lim_steer
             #    target_rad = target_theta/180*math.pi
             #self.get_logger().info('lllllllllll go left lllllllllllllllll')
         elif np.any(l_obs) and ~np.any(c_obs) :
-            speed = 0.15
+            speed = 0.10
             target_rad, target_theta = self.set_target_rad(path, position_x, position_y, self.target_dist_near, theta_x, theta_y, theta_z)
             #if 0 < target_theta:
             #    target_theta = 0.0#-lim_steer
@@ -232,7 +234,7 @@ class PathFollower(Node):
             speed = 0.0
             target_rad, target_theta = self.set_target_rad(path, position_x, position_y, self.target_dist_near, theta_x, theta_y, theta_z)
             if abs(target_theta) < 3:
-                speed = -0.15
+                speed = -0.10
             #    #target_theta = lim_steer
             #    #target_rad = lim_steer/180*math.pi
             #self.get_logger().info('ccccccccccccccccc c_obs_near lllllllllllllll')
@@ -240,16 +242,16 @@ class PathFollower(Node):
             speed = 0.0
             target_rad, target_theta = self.set_target_rad(path, position_x, position_y, self.target_dist_near, theta_x, theta_y, theta_z)
             if abs(target_theta) < 3:
-                speed = -0.15
+                speed = -0.10
                 #target_theta = -lim_steer
                 #target_rad = -lim_steer/180*math.pi
             #self.get_logger().info('ccccccccccccccccc c_obs_near rrrrrrrrrrrrrrr')
         elif np.any(c_obs_near) :
-            speed = -0.15
+            speed = -0.10
             target_rad, target_theta = self.set_target_rad(path, position_x, position_y, self.target_dist_near, theta_x, theta_y, theta_z)
             #self.get_logger().info('ccccccccccccccccc c_obs_near ccccccccccccccc')
         elif np.any(c_obs) :
-            speed = 0.25
+            speed = 0.20
             target_rad, target_theta = self.set_target_rad(path, position_x, position_y, self.target_dist_near, theta_x, theta_y, theta_z)
             #self.get_logger().info('dddddddddd speed down ddddddddddd')
         
@@ -264,20 +266,23 @@ class PathFollower(Node):
         
         lim_steer = 20
         #lim_steer = 30 24/11/29 ok
-        if abs(target_theta) < 10 and 0.0 < speed and speed < 0.5:
-            speed = 0.5
+        #if abs(target_theta) < 10 and 0.0 < speed and speed < 0.5:
+        if abs(target_theta) < 10:
+            if 0.0 < speed:
+                if speed < 0.5:
+                    speed = 0.5
         #elif target_theta  < -lim_steer:
         if target_theta  < -lim_steer:
-            speed = 0.15
+            speed = 0.10
             target_rad = -lim_steer/180*math.pi
         elif lim_steer < target_theta:
-            speed = 0.15
+            speed = 0.10
             target_rad = lim_steer/180*math.pi
         
         if abs(target_theta)  > 90:
-            speed = -0.15
+            speed = -0.10
         if np.any(c_obs_back) :
-            speed = -0.15
+            speed = 0.10
         
         
         
@@ -296,9 +301,12 @@ class PathFollower(Node):
         if self.stop_flag == 0:
             twist_msg.linear.x = speed #0.3  # 前進速度 (m/s)
             twist_msg.angular.z = target_rad_pd  # 角速度 (rad/s)
+            #twist_msg.linear.x = -speed #0.3  # 前進速度 (m/s)
+            #twist_msg.angular.z = -target_rad_pd # 角速度 (rad/s) back left to left
         else:
             twist_msg.linear.x = 0.0  # 前進速度 (m/s)
             twist_msg.angular.z = 0.0  # 角速度 (rad/s)
+        
         self.cmd_vel_publisher.publish(twist_msg)
         #self.get_logger().info('Publishing cmd_vel: linear.x = %f, angular.z = %f : %f deg' % (twist_msg.linear.x, twist_msg.angular.z, math.degrees(twist_msg.angular.z)))
         

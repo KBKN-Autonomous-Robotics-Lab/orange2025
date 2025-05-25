@@ -51,7 +51,7 @@ class ReflectionIntensityMap(Node):
     # コンストラクタです、クラスのインスタンスを作成する際に呼び出されます。
     def __init__(self):
         # 継承元のクラスを初期化します。（https://www.python-izm.com/advanced/class_extend/）今回の場合継承するクラスはNodeになります。
-        super().__init__('reflection_intensity_map_node')
+        super().__init__('self_drive_line_node')
         
         qos_profile = QoSProfile(
             history=QoSHistoryPolicy.KEEP_LAST,
@@ -118,7 +118,8 @@ class ReflectionIntensityMap(Node):
         self.left_line_buff = np.array([[],[],[],[]]);
         #self.white_buff = np.array([[],[],[],[]]);
         self.white_buff = np.array([[],[],[],[],[]]);
-        self.duration = 10.0  # time for buff white_buff
+        self.duration = 3.0  # time for buff white_buff
+        self.right_x_candidates = [];
 
         self.image_saved = False  # 画像保存フラグ（初回のみ保存する）
         #image_angle
@@ -145,13 +146,13 @@ class ReflectionIntensityMap(Node):
         
         #ground 
         self.ground_pixel = 1000/50#障害物のグリッドサイズ設定
-        self.MAP_RANGE = 7.0 #[m]auto nav 7m  selfdrive:12
+        self.MAP_RANGE = 12.0 #[m]auto nav 7m  selfdrive:12
         
-        self.MAP_RANGE_GL = 7 #[m] 
-        self.MAP_LIM_X_MIN = -7.0 #[m]
-        self.MAP_LIM_X_MAX =  7.0 #[m]
-        self.MAP_LIM_Y_MIN = -7.0 #[m]
-        self.MAP_LIM_Y_MAX =  7.0 #[m]
+        self.MAP_RANGE_GL = 12 #[m] 
+        self.MAP_LIM_X_MIN = -12.0 #[m]
+        self.MAP_LIM_X_MAX =  12.0 #[m]
+        self.MAP_LIM_Y_MIN = -12.0 #[m]
+        self.MAP_LIM_Y_MAX =  12.0 #[m]
         
         #map position
         self.map_position_x_buff = 0.0 #[m]
@@ -175,7 +176,8 @@ class ReflectionIntensityMap(Node):
         self.kernel_open = (2, 2)
         self.kernel_close = (2, 2)
         self.map_place_x = -0 #auto nav -0 self drive  range 12  x 0
-        self.map_place_y = 14.1 # autona14 self drive   range 12 y 24.1
+        self.map_place_y = 24.1 # autona14 self drive   range 12 y 24.1
+        self.points_right_history = deque(maxlen=5) # this is how many times to stack points which is refered for kinji line arctan
         
     def timer_callback(self):
         if self.map_data_flag > 0:
@@ -328,13 +330,13 @@ class ReflectionIntensityMap(Node):
                return
             #self.log_image_size(image)
             #self.get_logger().info(f"[2] image loaded and converted ")
-            '''
+            
             h,w=image.shape[:2]
             ############ rotate image ##################
             
             self.update_angle()
-            #reflect_map_local = self.rotate_image(image, -self.theta_z +90)
             reflect_map_local = self.rotate_image(image, -self.angle +90)
+            #reflect_map_local = self.rotate_image(image, -self.angle +90)
             
             reflect_map_local_cut = self.crop_center(reflect_map_local, w//2, h//2)
             reflect_map_local_set = reflect_map_local_cut.astype(np.uint8)
@@ -347,7 +349,7 @@ class ReflectionIntensityMap(Node):
             bands, bands_p, sliced_height, sliced_width = list(self.slice_image(reflect_map_local_set, self.band_height, self.num_bands)) 
            # self.get_logger().info(f"[4] band sliced and graph shown")  
             
-            self.showgraph(bands)  
+            #self.showgraph(bands)  
             peak_image, peak_r_image, peak_l_image = self.peaks_image(bands, bands_p,sliced_height, sliced_width)  
             #self.get_logger().info(f"[5] peaks detected")
             
@@ -359,7 +361,7 @@ class ReflectionIntensityMap(Node):
             
             #curve_points = self.generate_lines (peak_points, interval = 0.1, extend = 0.5, offset_distance=2.2, direction="right")## line theta koushin
              
-            right_line,left_line, dotted_line = self.generate_right_left_curves(right_point, left_point, interval = 0.1, extend = 0.5, parallel_offset = 2)
+            right_line,left_line, dotted_line = self.generate_right_left_curves(right_point, left_point, interval = 0.1, extend = 0.5, parallel_offset = 3)
 
             #self.get_logger().info(f"[7] right left line gernerated ")
             
@@ -376,13 +378,16 @@ class ReflectionIntensityMap(Node):
             
             
            #right_line,left_line = self.generate_lines (right_point, left_point, interval = 0.1, extend = 0.5, offset_distance=2.2, direction="right")## line theta koushin
-            
-            print("角度（deg）:", self.angle)
+            print("right_flag", self.right_flag)
+            print("角度（deg）self.right_angle:", self.right_angle)
+            print("角度（deg）self.offset:", self.offset)
+            print("角度（deg）self.angle:", self.angle)
+            print("角度（deg）self.theta_z:", self.theta_z)
             #print("角度（deg）:", self.angle_offset)
             self.publish_right_left_lines(right_line, left_line, dotted_line)
             #self.get_logger().info(f"[9] right left line published")
             #self.publish_pcd(right_line)
-            '''
+            
             
             binary_image = self.binarize_image(image)
             kernel_open = cv2.getStructuringElement(cv2.MORPH_RECT, self.kernel_open)  
@@ -427,11 +432,12 @@ class ReflectionIntensityMap(Node):
             
     def update_angle(self, max_delta = 15.0, max_history = 5): # max_delta = 15.0
         
-        if self.left_flag == 1 and self.left_flag == 1:
-            self.angle = self.angle + self.left_angle
+        if self.right_flag > 10 and abs(self.right_angle < 10):
+            self.offset = self.offset + self.right_angle
+            self.angle = self.offset
         else:
             self.angle = self.theta_z
-            
+            self.offset = self.theta_z
         
              
         #max_delta (float): 許容される最大変化量 [deg]
@@ -451,8 +457,7 @@ class ReflectionIntensityMap(Node):
      #   self.angle = sum(self.angle_history) / len(self.angle_history)
         #self.angle_offset = self.angle_offset + self.angle
      #   self.angle_offset = self.angle
-    
-
+   
     def peaks_image(self, bands, bands_p, height, width):
         # 元画像サイズのマスク画像を作成（初期値0）
         point_mask = np.zeros((height, width), dtype=np.uint8)
@@ -472,25 +477,21 @@ class ReflectionIntensityMap(Node):
             for x in peaks:  # for right line
                 if 0 <= x < width and 0 <= y < height:
                     point_mask[y, x] = 255  # 対応する位置に 1 をセット and (height//2) <= y < height 
-                    if self.right_flag == 0:#self.right_first:
-                        if (_w + 10) <= x <= (_w + 30) and (_h - 40) <= y < (_h + 40):
-                            peaks_r_image[y, x] = 255 # 対応する位置に 1 をセット
+                    if self.right_first:
+                       # if (_w + 10) <= x <= (_w + 30) and (_h - 40) <= y < (_h + 20):
+                       if (_w + 10) <= x <= (_w + 30) and 0 <= y < height:
                             self.right_peak_x = x
-                            #self.get_logger().info(f"self.right_peak_x : {self.right_peak_x}")
                             self.right_first = False
                     else:
-                        if (self.right_peak_x - 10) <= x <= (self.right_peak_x + 10) and (_h - 20) <= y < (_h + 20):
+                        if (self.right_peak_x - 10) <= x <= (self.right_peak_x + 10) and 0 <= y < height-45:
                             peaks_r_image[y, x] = 255
                             if (_h - 20) <= y < (_h + 20):
                                 self.right_peak_x = x
-                        #else:
-                            #self.right_peak_x = None
-                            #self.right_first = True
                                 
             for x in peaks:  # for left line
                 if 0 <= x < width and 0 <= y < height:
-                    if self.left_flag == 0:
-                        if (_w - 30) <= x <= (_w - 10) and (_h - 40) <= y < (_h + 40):
+                    if self.left_first:
+                        if 0 <= x <= (_w - 20) and (_h - 20) <= y < (_h + 20):
                             peaks_l_image[y, x] = 255  # 対応する位置に 1 をセット
                             self.left_peak_x = x
                             self.left_first = False
@@ -499,7 +500,7 @@ class ReflectionIntensityMap(Node):
                             peaks_l_image[y, x] = 255
                             if (_h - 20) <= y < (_h + 20):
                                 self.left_peak_x = x
-
+                                
         return point_mask, peaks_r_image, peaks_l_image
 
 
@@ -520,21 +521,26 @@ class ReflectionIntensityMap(Node):
         def generate_curve(points):
             N = points.shape[0]
             if N < 3:
+                print("deg N<3 empty :", np.empty((0, 4), dtype=np.float32), 0.0)
                 return np.empty((0, 4), dtype=np.float32), 0.0
 
-            x_vals = points[:, 0]
-            y_vals = points[:, 1]
-
-            if N == 2:
-                coeffs = np.polyfit(x_vals, y_vals, deg=1)
-                poly = np.poly1d(coeffs)
-                angle_rad = np.arctan(coeffs[0])
             else:
+                x_vals = points[:, 0]
+                y_vals = points[:, 1]
                 coeffs = np.polyfit(x_vals, y_vals, deg=2)
                 poly = np.poly1d(coeffs)
                 x_mid = 0.5 * (np.min(x_vals) + np.max(x_vals))
                 dy_dx = 2 * coeffs[0] * x_mid + coeffs[1]
-                angle_rad = np.arctan(dy_dx)
+                pre_angle_rad = np.arctan(dy_dx)
+                angle_rad = 0
+                if np.degrees(pre_angle_rad) > -10:
+                    if np.degrees(pre_angle_rad) < 10:
+                        print("deg ok :pre_angle_rad", pre_angle_rad)
+                        angle_rad = pre_angle_rad
+                else:
+                    angle_rad = 0
+                    print("deg over :pre_angle_rad", pre_angle_rad)
+                #self.right_angle = angle_rad
 
             x_min = np.min(x_vals)
             x_max = np.max(x_vals) + extend
@@ -544,6 +550,9 @@ class ReflectionIntensityMap(Node):
             z_new = np.zeros_like(x_new, dtype=np.float32)
             intensity_new = np.ones_like(x_new, dtype=np.float32)
             curve_points = np.vstack((x_new, y_new, z_new, intensity_new)).T
+            
+            #print("curve_points.astype(np.float32) ", curve_points.astype(np.float32) )
+            #print("np.degrees(angle_rad) ", np.degrees(angle_rad) )
 
             return curve_points.astype(np.float32), np.degrees(angle_rad)
             
@@ -577,22 +586,33 @@ class ReflectionIntensityMap(Node):
         # 安全性を考慮してNoneチェックを追加
         #if points_right is None or not isinstance(points_right, np.ndarray):
         if points_right is None or points_right.shape[0]<3:
-            self.get_logger().warn("右側点群がNoneまたは無効です。")
-            right_curve, self.right_angle = np.empty((0, 4), dtype=np.float32), 0.0
+            #self.get_logger().warn("右側点群がNoneまたは無効です。")
+            right_curve, right_angle_generate = np.empty((0, 4), dtype=np.float32), 0.0
+            self.right_angle = right_angle_generate
             dotted_curve = np.empty((0, 4), dtype=np.float32)
             self.right_flag = 0
         else:
-            right_curve, self.right_angle = generate_curve(points_right)
+            self.points_right_history.append(points_right)
+            right_combined = np.vstack(self.points_right_history)
+            right_curve, right_angle_generate = generate_curve(right_combined)
+            print("length of point right", len(points_right))
+            print("length of combined", len(right_combined))
+            #right_curve, right_angle_generate = generate_curve(points_right)
+            self.right_angle = right_angle_generate
+            
             dotted_curve = generate_parallel_curve(right_curve, parallel_offset)
-            self.right_flag = 1
+            #print("right_points",right_points)
+            #print("right_conbined",right_combined)
+           
+            self.right_flag += 1
 
         #if points_left is None or not isinstance(points_left, np.ndarray):
         if points_left is None or points_left.shape[0]<3:
-            self.get_logger().warn("左側点群がNoneまたは無効です。")
+            #self.get_logger().warn("左側点群がNoneまたは無効です。")
             left_curve, self.left_angle = np.empty((0, 4), dtype=np.float32), 0.0
             self.left_flag = 0
         else:
-            left_curve, self.left_angle = generate_curve(points_left)
+            #left_curve, self.left_angle = generate_curve(points_left)
             self.left_flag = 1
         
        # if self.right_flag ==0 and self.left_flag == 0:

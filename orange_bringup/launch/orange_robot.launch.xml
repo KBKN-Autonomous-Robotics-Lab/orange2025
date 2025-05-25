@@ -10,13 +10,15 @@
   <arg name="debug_imu" default="false"/>
   <arg name="publish_TF" default="false"/>
   <arg name="publish_odom" default="true"/>
+  <arg name="use_sim_time" default="false"/>
+  <arg name="debug_wheel_imu" default="false"/>
   <arg name="twist_cmd_vel_topic" default="/cmd_vel"/>
   <arg name="cmd_vel_topic" default="/vel/cmd_vel"/>
   <arg name="cmd_rpm_topic" default="/vel/cmd_rpm"/>
   <arg name="cmd_deg_topic" default="/pos/cmd_deg"/>
   <arg name="cmd_dist_topic" default="/pos/cmd_dist"/>
   <arg name="odom_topic" default="/odom"/>
-  <arg name="imu_topic" default="/livox/imu"/>
+  <arg name="imu_topic" default="/imu"/>
   <arg name="fusion_odom_topic" default="/localization/odom"/>
   <arg name="ekf_publish_TF" default="false"/>
   <arg name="hokuyo_scan_topic" default="/hokuyo_scan"/>
@@ -26,6 +28,9 @@
   <arg name="livox_points_topic" default="/livox_points"/>
   <arg name="merged_cloud_topic" default="/merged_cloud"/>
   <arg name="merged_scan_topic" default="/merged_scan"/>
+  <arg name="fused_odom_topic" default="/odom/wheel_imu"/>
+  <arg name="nav_topic" default="/nav_state"/>
+  <arg name="estop_topic" default="/estop"/>
   <arg name="xacro_file_path" default="$(find-pkg-share orange_description)/xacro/orange_robot.xacro"/>
   <arg name="motor_driver_config_file_path" default="$(find-pkg-share orange_bringup)/config/motor_driver_params.yaml"/>
   <!-- robot_state_publisher -->
@@ -85,7 +90,7 @@
     <param name="baud" value="115200"/>
     <param name="country_id" value="0"/>
     <param name="Position_magnification" value="1.675"/>
-    <param name="heading" value="180"/>
+    <param name="heading" value="180.8"/>
     <param name="time_out" value="1.0"/>
   </node>
   <!-- 
@@ -93,8 +98,8 @@
   </node>
    -->
   <!-- combination_GPSposition_GPSheading -->
-  <node pkg="orange_gnss" exec="combination" output="screen">
-  </node>
+  <!--<node pkg="orange_gnss" exec="combination" output="screen">
+  </node>-->
   <!-- ekf_myself -->
   <!-- node pkg="orange_gnss" exec="ekf_myself" output="screen" >
     <param name="ekf_publish_TF" value="True"/>
@@ -165,4 +170,12 @@
     <arg name="scan_destination_topic" value="$(var merged_scan_topic)"/>
     <arg name="laserscan_topics" value="$(var hokuyo_scan_topic) $(var livox_scan_topic)"/>
   </include>-->
+  <!-- led_node -->
+  <node pkg="orange_sensor_tools" exec="led_node">
+    <param name="use_sim_time" value="$(var use_sim_time)"/>
+    <param name="serial_port" value="/dev/sensors/LED"/>
+    <param name="baud_rate" value="115200"/>
+    <param name="nav_topic" value="$(var nav_topic)"/>
+    <param name="estop_topic" value="$(var estop_topic)"/>
+  </node>
 </launch>

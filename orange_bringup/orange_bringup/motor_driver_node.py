@@ -83,7 +83,7 @@ class MotorDriverNode(Node):
         self.ASYNC = 0
 
         # -----Initialize Publisher-----
-        self.odom_pub = self.create_publisher(Odometry, "/odom", 10)
+        self.odom_pub = self.create_publisher(Odometry, "/odom", 1)
         self.odom_msg = Odometry()
 
         # -----Initialize subscriber-----

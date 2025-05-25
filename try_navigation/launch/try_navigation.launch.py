@@ -40,12 +40,12 @@ def generate_launch_description():
         ),
    
         #gps ekf edit
-        Node(package='try_navigation',
-            executable='ekf_myself_gps',
-            name='sensor_fusion',
-            output='screen',
-            arguments=[]
-        ),
+        #Node(package='try_navigation',
+        #    executable='ekf_myself_gps',
+        #    name='sensor_fusion',
+        #    output='screen',
+        #    arguments=[]
+        #),
         
         #pcd segmentation
         Node(package='pcd_convert',
@@ -63,24 +63,23 @@ def generate_launch_description():
         ),
         
         #waypoint manager
-        
         # waypoint gps command
-        #Node(package='navigation_control',
-        #    executable='gps_waypoint',
-        #    name='gps_waypoint',
-        #    output='screen',
-        #    arguments=[],
-        #),
+        Node(package='navigation_control',
+            executable='gps_waypoint',
+            name='gps_waypoint',
+            output='screen',
+            arguments=[],
+        ),
         # $ ros2 run navigation_control gps_waypoint
         # file path /ros2_ws/src/Use_action/navigation_control/navigation_control/gps_waypoint
         
         #reflection intensity map
-        Node(package='try_navigation',
-            executable='reflection_intensity_map',
-            name='reflection_intensity_map_node',
-            output='screen',
-            arguments=[],
-        ),
+        #Node(package='try_navigation',
+        #    executable='reflection_intensity_map',
+        #    name='reflection_intensity_map_node',
+        #    output='screen',
+        #    arguments=[],
+        #),
         #path planning
         Node(package='try_navigation',
             executable='potential_astar',
@@ -103,4 +102,18 @@ def generate_launch_description():
             output='screen',
             arguments=[],
         ),
+        #takamori Autonav
+        Node(package='try_navigation',
+            executable='reflection_to_pcd',
+            name='reflection_to_pcd',
+            output='screen',
+            arguments=[],
+        ),
+        #takamori Selfdrive
+        #Node(package='try_navigation',
+        #    executable='self_drive_line',
+        #    name='self_drive_line',
+        #    output='screen',
+        #    arguments=[],
+        #),
     ])
