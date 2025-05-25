@@ -70,9 +70,9 @@ class PotentialAStar(Node):
         #self.pothole_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/pothole_points', self.get_pot_obs, qos_profile)
         #self.tire_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/tire_points', self.get_tire_obs, qos_profile)
         self.white_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/white_buff', self.get_white_obs, qos_profile)
-        #self.right_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/right_curve', self.get_right_obs, qos_profile)
-        #self.left_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/left_lines', self.get_left_obs, qos_profile)
-        #self.dot_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/dot_lines', self.get_dot_obs, qos_profile)
+        #self.right_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/line_buff_right', self.get_right_obs, qos_profile)
+        #self.left_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/line_buff_left', self.get_left_obs, qos_profile)
+        #self.dot_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/dotted_lines', self.get_dot_obs, qos_profile)
         self.subscription  # 警告を回避するために設置されているだけです。削除しても挙動はかわりません。
         #self.timer = self.create_timer(0.05, self.timer_callback)
         
@@ -138,7 +138,7 @@ class PotentialAStar(Node):
         self.dot_obs_points = np.array([[],[],[]])
         
         #DRIVE MODE
-        self.functions_test = 1
+        self.functions_test = 1 #autonav:1 selfdrive:0
         
         #obs info for SELF DRIVE
         self.tire_info      = 0
