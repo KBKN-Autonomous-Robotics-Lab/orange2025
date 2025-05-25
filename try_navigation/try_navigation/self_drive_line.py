@@ -177,7 +177,7 @@ class ReflectionIntensityMap(Node):
         self.kernel_close = (2, 2)
         self.map_place_x = -0 #auto nav -0 self drive  range 12  x 0
         self.map_place_y = 24.1 # autona14 self drive   range 12 y 24.1
-        self.points_right_history = deque(maxlen=20)
+        self.points_right_history = deque(maxlen=5) # this is how many times to stack points which is refered for kinji line arctan
         
     def timer_callback(self):
         if self.map_data_flag > 0:
@@ -587,7 +587,6 @@ class ReflectionIntensityMap(Node):
         #if points_right is None or not isinstance(points_right, np.ndarray):
         if points_right is None or points_right.shape[0]<3:
             #self.get_logger().warn("右側点群がNoneまたは無効です。")
-            #right_curve, self.right_angle = np.empty((0, 4), dtype=np.float32), 0.0
             right_curve, right_angle_generate = np.empty((0, 4), dtype=np.float32), 0.0
             self.right_angle = right_angle_generate
             dotted_curve = np.empty((0, 4), dtype=np.float32)
@@ -596,6 +595,8 @@ class ReflectionIntensityMap(Node):
             self.points_right_history.append(points_right)
             right_combined = np.vstack(self.points_right_history)
             right_curve, right_angle_generate = generate_curve(right_combined)
+            print("length of point right", len(points_right))
+            print("length of combined", len(right_combined))
             #right_curve, right_angle_generate = generate_curve(points_right)
             self.right_angle = right_angle_generate
             
