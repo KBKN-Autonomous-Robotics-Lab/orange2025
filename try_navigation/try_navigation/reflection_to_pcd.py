@@ -477,15 +477,12 @@ class ReflectionIntensityMap(Node):
                             peaks_r_image[y, x] = 255 # 対応する位置に 1 をセット
                             self.right_peak_x = x
                             #self.get_logger().info(f"self.right_peak_x : {self.right_peak_x}")
-                            self.right_first = False
                     else:
                         if (self.right_peak_x - 10) <= x <= (self.right_peak_x + 10) and (_h - 20) <= y < (_h + 20):
                             peaks_r_image[y, x] = 255
                             if (_h - 20) <= y < (_h + 20):
                                 self.right_peak_x = x
-                        #else:
-                            #self.right_peak_x = None
-                            #self.right_first = True
+
                                 
             for x in peaks:  # for left line
                 if 0 <= x < width and 0 <= y < height:

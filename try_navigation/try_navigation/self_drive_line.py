@@ -177,6 +177,11 @@ class ReflectionIntensityMap(Node):
         self.kernel_close = (2, 2)
         self.map_place_x = -0 #auto nav -0 self drive  range 12  x 0
         self.map_place_y = 24.1 # autona14 self drive   range 12 y 24.1
+        self.right_left_side = 140  #120 center 40 = 1(m)  3.5 m = 140
+        self.right_right_side = 200     #200 = 5 m
+        self.left_left_side = 20    # 0.5 m
+        self.left_right_side = 80  # 2m
+        
         self.points_right_history = deque(maxlen=5) # this is how many times to stack points which is refered for kinji line arctan
         
     def timer_callback(self):
@@ -349,7 +354,7 @@ class ReflectionIntensityMap(Node):
             bands, bands_p, sliced_height, sliced_width = list(self.slice_image(reflect_map_local_set, self.band_height, self.num_bands)) 
            # self.get_logger().info(f"[4] band sliced and graph shown")  
             
-            #self.showgraph(bands)  
+            self.showgraph(bands)  
             peak_image, peak_r_image, peak_l_image = self.peaks_image(bands, bands_p,sliced_height, sliced_width)  
             #self.get_logger().info(f"[5] peaks detected")
             
@@ -477,29 +482,25 @@ class ReflectionIntensityMap(Node):
             for x in peaks:  # for right line
                 if 0 <= x < width and 0 <= y < height:
                     point_mask[y, x] = 255  # 対応する位置に 1 をセット and (height//2) <= y < height 
-                    if self.right_first:
-                       # if (_w + 10) <= x <= (_w + 30) and (_h - 40) <= y < (_h + 20):
-                       if (_w + 10) <= x <= (_w + 30) and 0 <= y < height:
-                            self.right_peak_x = x
-                            self.right_first = False
-                    else:
-                        if (self.right_peak_x - 10) <= x <= (self.right_peak_x + 10) and 0 <= y < height-45:
+                    if self.right_flag == 0:
+                       if self.right_left_side <= x <= self.right_right_side and 0 <= y < 160:
                             peaks_r_image[y, x] = 255
-                            if (_h - 20) <= y < (_h + 20):
-                                self.right_peak_x = x
+                            self.right_peak_x = x
+                    else:
+                        if (self.right_peak_x - 10) <= x <= (self.right_peak_x + 10) and 0 <= y < 160:
+                            peaks_r_image[y, x] = 255
+                            self.right_peak_x = x
                                 
             for x in peaks:  # for left line
                 if 0 <= x < width and 0 <= y < height:
-                    if self.left_first:
-                        if 0 <= x <= (_w - 20) and (_h - 20) <= y < (_h + 20):
+                    if self.left_flag == 0:
+                        if self.left_left_side <= x <= self.left_right_side and 0 <= y < 160:
                             peaks_l_image[y, x] = 255  # 対応する位置に 1 をセット
                             self.left_peak_x = x
-                            self.left_first = False
                     else:
-                        if (self.left_peak_x - 10) <= x <= (self.left_peak_x + 25) and (_h - 20) <= y < (_h + 20):
+                        if (self.left_peak_x - 10) <= x <= (self.left_peak_x + 25) and 0 <= y < 160:
                             peaks_l_image[y, x] = 255
-                            if (_h - 20) <= y < (_h + 20):
-                                self.left_peak_x = x
+                            self.left_peak_x = x
                                 
         return point_mask, peaks_r_image, peaks_l_image
 
@@ -612,7 +613,7 @@ class ReflectionIntensityMap(Node):
             left_curve, self.left_angle = np.empty((0, 4), dtype=np.float32), 0.0
             self.left_flag = 0
         else:
-            #left_curve, self.left_angle = generate_curve(points_left)
+            left_curve, self.left_angle = generate_curve(points_left)
             self.left_flag = 1
         
        # if self.right_flag ==0 and self.left_flag == 0:
