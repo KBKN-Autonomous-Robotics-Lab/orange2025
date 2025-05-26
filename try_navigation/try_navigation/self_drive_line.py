@@ -119,7 +119,10 @@ class ReflectionIntensityMap(Node):
         #self.white_buff = np.array([[],[],[],[]]);
         self.white_buff = np.array([[],[],[],[],[]]);
         self.duration = 5.0  # time for buff white_buff
-        self.right_x_candidates = [];
+        self.right_x_candidates = [];         
+        self.points_right_history = deque(maxlen=5) # this is how many times to stack points which is refered for kinji line arctan
+        self.right_combined = [];
+       
 
         self.image_saved = False  # 画像保存フラグ（初回のみ保存する）
         #image_angle
@@ -181,8 +184,7 @@ class ReflectionIntensityMap(Node):
         self.right_right_side = 200     #200 = 5 m
         self.left_left_side = 20    # 0.5 m
         self.left_right_side = 80  # 2m
-        
-        self.points_right_history = deque(maxlen=5) # this is how many times to stack points which is refered for kinji line arctan
+
         
     def timer_callback(self):
         if self.map_data_flag > 0:
@@ -483,7 +485,7 @@ class ReflectionIntensityMap(Node):
                 if 0 <= x < width and 0 <= y < height:
                     point_mask[y, x] = 255  # 対応する位置に 1 をセット and (height//2) <= y < height 
                     if self.right_flag == 0:
-                       if self.right_left_side <= x <= self.right_right_side and 0 <= y < 160:
+                       if self.right_left_side <= x <= self.right_right_side and 40 <= y < 140:
                             peaks_r_image[y, x] = 255
                             self.right_peak_x = x
                     else:
@@ -586,6 +588,7 @@ class ReflectionIntensityMap(Node):
 
         # 安全性を考慮してNoneチェックを追加
         #if points_right is None or not isinstance(points_right, np.ndarray):
+        '''
         if points_right is None or points_right.shape[0]<3:
             #self.get_logger().warn("右側点群がNoneまたは無効です。")
             right_curve, right_angle_generate = np.empty((0, 4), dtype=np.float32), 0.0
@@ -606,6 +609,28 @@ class ReflectionIntensityMap(Node):
             #print("right_conbined",right_combined)
            
             self.right_flag += 1
+            '''
+        if points_right.shape[0]>2 or self.right_combined.shape[0]>5:
+            self.points_right_history.append(points_right)
+            self.right_combined = np.vstack(self.points_right_history)
+            right_curve, right_angle_generate = generate_curve(self.right_combined)
+            print("length of point right", len(points_right))
+            print("length of combined", len(self.right_combined))
+            #right_curve, right_angle_generate = generate_curve(points_right)
+            self.right_angle = right_angle_generate
+            
+            dotted_curve = generate_parallel_curve(right_curve, parallel_offset)
+            #print("right_points",right_points)
+            #print("right_conbined",right_combined)
+           
+            self.right_flag += 1
+        else :
+            #self.get_logger().warn("右側点群がNoneまたは無効です。")
+            right_curve, right_angle_generate = np.empty((0, 4), dtype=np.float32), 0.0
+            self.right_angle = right_angle_generate
+            dotted_curve = np.empty((0, 4), dtype=np.float32)
+            self.right_flag = 0
+        
 
         #if points_left is None or not isinstance(points_left, np.ndarray):
         if points_left is None or points_left.shape[0]<3:
