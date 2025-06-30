@@ -61,9 +61,13 @@ class ExtendedKalmanFilter(Node):
         self.k_p = 0.6;
         self.k_d = 0.5;
         ###########################
+        ###IGVC20250530 add########
+        self.set_yaw_satellites_no =4  #satellite count
+        self.set_yaw_count =100 #n/Hz =s
+        
 
         self.sub_a = self.create_subscription(
-            Odometry, '/odom/wheel_imu', self.sensor_a_callback, 10)
+            Odometry, '/odom', self.sensor_a_callback, 10)
         self.sub_b = self.create_subscription(
             Odometry, '/odom/UM982', self.sensor_b_callback, 10)
         #self.sub_b = self.create_subscription(
@@ -403,7 +407,8 @@ class ExtendedKalmanFilter(Node):
             self.R4 = R[3]
             self.get_logger().info(f"++ RR_count_bad: {self.RR_count_bad}++")
             
-            if self.Number_of_satellites >= 28:
+            #if self.Number_of_satellites >= 28: #################### IGVC20250529 use  #######################
+            if self.Number_of_satellites >= self.set_yaw_satellites_no: #################### IGVC20250530 change  #######################
                 self.GPS_angle_conut += 1
                 self.GPS_angle_reset_count = 0
                 yaw_offset1 = self.GPSYaw % (360/180*math.pi)
@@ -416,7 +421,8 @@ class ExtendedKalmanFilter(Node):
                 if self.GPS_angle_reset_count > 20:
                     self.GPS_angle_conut = 0
                     self.GPS_angle_reset_count = 0
-            if self.GPS_angle_conut > 100:
+
+            if self.GPS_angle_conut > self.set_yaw_count:
                 yaw_offset_list = list(self.diff_yaw_buff)
                 yaw_offset_median = sorted(yaw_offset_list)[len(yaw_offset_list) // 2]
                 self.offsetyaw = yaw_offset_median

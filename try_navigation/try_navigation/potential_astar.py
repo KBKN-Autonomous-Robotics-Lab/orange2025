@@ -60,8 +60,8 @@ class PotentialAStar(Node):
         
         # Subscriptionを作成。CustomMsg型,'/livox/lidar'という名前のtopicをsubscribe。
         self.subscription = self.create_subscription(sensor_msgs.PointCloud2, '/pcd_segment_obs', self.potential_astar, qos_profile)
-        self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom/wheel_imu', self.get_odom, qos_profile_sub)
-        #self.subscription = self.create_subscription(nav_msgs.Odometry,'/fusion/odom', self.get_odom, qos_profile_sub)
+        #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom/wheel_imu', self.get_odom, qos_profile_sub)
+        self.subscription = self.create_subscription(nav_msgs.Odometry,'/fusion/odom', self.get_odom, qos_profile_sub)
         #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom_fast', self.get_odom, qos_profile_sub)
         #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom_ekf_match', self.get_odom, qos_profile_sub)
         self.subscription = self.create_subscription(geometry_msgs.PoseArray,'/current_waypoint', self.get_waypoint, qos_profile_sub)
@@ -108,7 +108,7 @@ class PotentialAStar(Node):
         self.cg2nd=20 #ポテンシャルの引力パラメータ
         self.lg2nd=20 #ポテンシャルの引力パラメータ
         self.co2nd=11 #ポテンシャルの斥力パラメータ SICKパラ目：co=11;lo=0.55;
-        self.lo2nd=0.25#55 #0.5#0.9#ポテンシャルの斥力パラメータ  24/11/29 ok
+        self.lo2nd=0.22#55 #0.5#0.9#ポテンシャルの斥力パラメータ  24/11/29 ok IGVC20250601 0.25 -> 0.22
         #self.lo2nd=0.30#55 #0.5#0.9#ポテンシャルの斥力パラメータ
         
         
@@ -138,7 +138,7 @@ class PotentialAStar(Node):
         self.dot_obs_points = np.array([[],[],[]])
         
         #DRIVE MODE
-        self.functions_test = 1 #autonav:1 selfdrive:0
+        self.functions_test = 0 #autonav:1 selfdrive:0
         
         #obs info for SELF DRIVE
         self.tire_info      = 0
@@ -157,11 +157,11 @@ class PotentialAStar(Node):
             [   0,      0,    0,       0,        1,        0,       0,      1], # waypoint  2 curve
             [   0,      0,    0,       0,        1,        0,       0,      1], # waypoint  3 front barrel
             [   0,      0,    0,       0,        0,        1,       1,      0], # waypoint  4 next barrel :lanechange
-            [   0,      0,    0,       0,        0,        1,       1,      0], # waypoint  5 front barrel
+            [   0,      0,    0,       0,        1,        1,       1,      0], # waypoint  5 front barrel
             [   0,      0,    0,       0,        0,        1,       1,      0], # waypoint  6 next barrel :lanechange
             [   0,      0,    0,       2,        1,        0,       0,      1], # waypoint  7 front stop
             [   0,      0,    0,       2,        0,        1,       0,      0], # waypoint  8 intersection
-            [   0,      0,    0,       0,        1,        0,       0,      0], # waypoint  9 front stop
+            [   0,      0,    0,       0,        0,        0,       0,      0], # waypoint  9 front stop
             [   0,      0,    1,       0,        0,        1,       0,      0], # waypoint 10 intersection :human
             [   0,      0,    1,       0,        1,        0,       0,      0], # waypoint 11 front r lane
             [   0,      0,    0,       0,        1,        0,       0,      1], # waypoint 12 curve
@@ -176,6 +176,10 @@ class PotentialAStar(Node):
             [   0,      0,    0,       0,        1,        0,       0,      0]  # waypoint 21 GOAL!!!!!!
         ]
         
+        
+        ################# IGVC SelfDrive Quolification line stop test #20250530# #################
+        self.sd_line_stop_test = 0
+        ##########################################################################################
         
     def timer_callback(self):
         #
@@ -424,6 +428,14 @@ class PotentialAStar(Node):
                 
         #obs round&duplicated  :grid_size before:28239 after100:24592 after50:8894 after10:3879
         obs_points = np.vstack((points[0,:], points[1,:], points[2,:]))
+        
+        
+        ################# IGVC SelfDrive Quolification line stop test #20250530# #################
+        if self.sd_line_stop_test == 1:
+            obs_points = np.array([[],[],[]])
+            #white_line_local =  np.array([[],[],[]])
+        ##########################################################################################
+        
         
         # それぞれが空でなければ追加
         if pothole_local.shape[1] > 0:

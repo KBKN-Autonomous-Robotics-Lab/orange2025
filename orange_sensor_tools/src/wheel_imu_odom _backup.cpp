@@ -49,12 +49,6 @@ void OdomFusionNode::imuCallback(const sensor_msgs::msg::Imu::SharedPtr msg)
   orientation_y_ = msg->orientation.y;
   orientation_z_ = msg->orientation.z;
   orientation_w_ = msg->orientation.w;
-  double orientation_square_ = sqrt(orientation_x_*orientation_x_ + orientation_y_*orientation_y_ + orientation_z_*orientation_z_ + orientation_w_*orientation_w_);
-  orientation_x_ = msg->orientation.x / orientation_square_;
-  orientation_y_ = msg->orientation.y / orientation_square_;
-  orientation_z_ = msg->orientation.z / orientation_square_;
-  orientation_w_ = msg->orientation.w / orientation_square_;
-  
 
   ang_vel_x_ = msg->angular_velocity.x;
   ang_vel_y_ = msg->angular_velocity.y;

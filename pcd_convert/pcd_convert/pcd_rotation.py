@@ -40,7 +40,7 @@ class PcdRotation(Node):
         
         #パラメータ
         #set LiDAR position
-        self.MID360_HIGHT = 0#980/1000; #hight position[m]
+        self.MID360_HIGHT = 980/1000; #hight position[m]
             
         #上下反転  LiDAR init
         self.THETA_INIT_X = 180 #[deg]
@@ -48,7 +48,7 @@ class PcdRotation(Node):
         self.THETA_INIT_Z = 0 #[deg]
         
         #initialize calibration
-        self.initialize_calibration = 0
+        self.initialize_calibration = 1
         self.pcd_buff = np.array([[],[],[],[]]);
         self.x1_init_point = 1.5
         self.x2_init_point = 2.5

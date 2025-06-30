@@ -74,8 +74,8 @@ class ReflectionIntensityMap(Node):
         )
         # Subscriptionを作成。CustomMsg型,'/livox/lidar'という名前のtopicをsubscribe。
         self.subscription = self.create_subscription(sensor_msgs.PointCloud2, '/pcd_segment_ground', self.reflect_map, qos_profile)
-        self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom/wheel_imu', self.get_odom, qos_profile_sub)
-        self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom/wheel_imu', self.get_ekf_odom, qos_profile_sub)
+        self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom', self.get_odom, qos_profile_sub)
+        self.subscription = self.create_subscription(nav_msgs.Odometry,'/fusion/odom', self.get_ekf_odom, qos_profile_sub)
         #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom_fast', self.get_odom, qos_profile_sub)
         self.subscription  # 警告を回避するために設置されているだけです。削除しても挙動はかわりません。
         self.timer = self.create_timer(0.1, self.timer_callback)
@@ -118,7 +118,7 @@ class ReflectionIntensityMap(Node):
         self.left_line_buff = np.array([[],[],[],[]]);
         #self.white_buff = np.array([[],[],[],[]]);
         self.white_buff = np.array([[],[],[],[],[]]);
-        self.duration = 10.0  # time for buff white_buff
+        self.duration = 3.0  # time for buff white_buff
 
         self.image_saved = False  # 画像保存フラグ（初回のみ保存する）
         #image_angle
@@ -309,7 +309,8 @@ class ReflectionIntensityMap(Node):
                  
         
         ##############################  takamori line filter  #################################
-        self.process(map_data_gl_set, position_x, position_y, theta_z, t_stamp)
+        #self.process(map_data_gl_set, position_x, position_y, theta_z, t_stamp)  #IGVC2025 0529 use
+        self.process(map_data_gl_set, ekf_position_x, ekf_position_y, ekf_theta_z, t_stamp)  #IGVC2025 0530 change
         #self.process_pgm(map_data_set, position_x, position_y)
         
          
@@ -394,7 +395,7 @@ class ReflectionIntensityMap(Node):
             closed_then = cv2.morphologyEx(open_close, cv2.MORPH_CLOSE, kernel_close)
             oc_image = cv2.morphologyEx(closed_then, cv2.MORPH_OPEN, kernel_open)    
              
-            edge_image = self.detect_edges(oc_image)
+            #edge_image = self.detect_edges(oc_image)
             
             white_point = self.image_to_pcd(oc_image, position_x, position_y, step=1.0)
             
@@ -477,15 +478,12 @@ class ReflectionIntensityMap(Node):
                             peaks_r_image[y, x] = 255 # 対応する位置に 1 をセット
                             self.right_peak_x = x
                             #self.get_logger().info(f"self.right_peak_x : {self.right_peak_x}")
-                            self.right_first = False
                     else:
                         if (self.right_peak_x - 10) <= x <= (self.right_peak_x + 10) and (_h - 20) <= y < (_h + 20):
                             peaks_r_image[y, x] = 255
                             if (_h - 20) <= y < (_h + 20):
                                 self.right_peak_x = x
-                        #else:
-                            #self.right_peak_x = None
-                            #self.right_first = True
+
                                 
             for x in peaks:  # for left line
                 if 0 <= x < width and 0 <= y < height:
@@ -810,7 +808,7 @@ class ReflectionIntensityMap(Node):
          
          
     def ref_to_image(self, map_data_set):
-        occ_threshold_param = 0.15  # 占有空間のしきい値
+        occ_threshold_param = 0.22# 占有空間のしきい値
         free_threshold_param = 0.05 # 自由空間のしきい値
 
         # 0〜1スケールと仮定し100倍する
