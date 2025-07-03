@@ -287,7 +287,7 @@ class PathFollower(Node):
         
         #set speed
         
-        speed_set = 2.00#55 AutoNav 1.10
+        speed_set = 0.55#55 AutoNav 1.10
         speed = speed_set
         
         ################# IGVC SelfDrive Full #20250601# #################
