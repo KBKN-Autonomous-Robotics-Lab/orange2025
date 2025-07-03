@@ -11,7 +11,6 @@
   <arg name="publish_TF" default="false"/>
   <arg name="publish_odom" default="true"/>
   <arg name="use_sim_time" default="false"/>
-  <arg name="debug_wheel_imu" default="false"/>
   <arg name="twist_cmd_vel_topic" default="/cmd_vel"/>
   <arg name="cmd_vel_topic" default="/vel/cmd_vel"/>
   <arg name="cmd_rpm_topic" default="/vel/cmd_rpm"/>
@@ -28,7 +27,6 @@
   <arg name="livox_points_topic" default="/livox_points"/>
   <arg name="merged_cloud_topic" default="/merged_cloud"/>
   <arg name="merged_scan_topic" default="/merged_scan"/>
-  <arg name="fused_odom_topic" default="/odom/wheel_imu"/>
   <arg name="nav_topic" default="/nav_state"/>
   <arg name="estop_topic" default="/estop"/>
   <arg name="xacro_file_path" default="$(find-pkg-share orange_description)/xacro/orange_robot.xacro"/>
