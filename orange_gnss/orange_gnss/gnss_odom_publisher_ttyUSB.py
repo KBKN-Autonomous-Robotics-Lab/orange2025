@@ -19,13 +19,13 @@ class GPSData(Node):
         self.declare_parameter('baud', 115200)
         self.declare_parameter('country_id', 0)
         self.declare_parameter('Position_magnification', 1.675)
-        self.declare_parameter('heading', 180)
+        self.declare_parameter('heading', 180.0)
 
         self.dev_name = self.get_parameter('port').get_parameter_value().string_value
         self.serial_baud = self.get_parameter('baud').get_parameter_value().integer_value
         self.country_id = self.get_parameter('country_id').get_parameter_value().integer_value
         self.Position_magnification = self.get_parameter('Position_magnification').get_parameter_value().double_value
-        self.theta = self.get_parameter('heading').get_parameter_value().double_value
+        #self.theta = self.get_parameter('heading').get_parameter_value().double_value
 
         self.initial_coordinate = None
         self.fix_data = None
@@ -89,25 +89,26 @@ class GPSData(Node):
         lon_sum = 0.0
         heading_sum = 0.0
         count = 0
-        serial_port = serial.Serial(self.dev_name, self.serial_baud)
-        line = serial_port.readline()
+        #serial_port = serial.Serial(self.dev_name, self.serial_baud)
+        #line = serial_port.readline()
 
         start_time = time.time()
         while time.time() - start_time < 10:  # 10 seconds
             GPS_data = self.get_gps_quat(self.dev_name, self.country_id)
-            gps_data = line.split(b",")
+            #gps_data = line.split(b",")
             if GPS_data and GPS_data[1] != 0 and GPS_data[2] != 0:
                 lat_sum += GPS_data[1]
                 lon_sum += GPS_data[2]
-                heading_sum += float(gps_data[1])
+                heading_sum += float(GPS_data[5])
                 count += 1
             time.sleep(0.1)  # Slight delay to avoid overwhelming the GPS device
 
         if count > 0:
             self.initial_coordinate = [lat_sum / count, lon_sum / count]
-            self.theta = (heading_sum / count) + 90
+            self.theta = (heading_sum / count) - 90
             self.initialized = True
             self.get_logger().info(f"Initial coordinate set to: {self.initial_coordinate}")
+            self.get_logger().info(f"Initial theta set to: {self.theta}")
             self.send_request()
         self.is_acquiring = False
 
@@ -132,7 +133,7 @@ class GPSData(Node):
 
         while(1):
             line = serial_port.readline()
-            self.get_logger().info(f"line: {line}")
+            #self.get_logger().info(f"line: {line}")
             talker_ID_indoor = line.find(initial_letters_indoor)
             talker_ID_outdoor = line.find(initial_letters_outdoor)            
             if talker_ID_indoor != -1:
@@ -228,7 +229,7 @@ class GPSData(Node):
     
     def heading_to_quat(self ,real_heading):
 
-        robotheading = real_heading + 90
+        robotheading = real_heading - 90
         if robotheading >= 360:
             robotheading -= 360
 

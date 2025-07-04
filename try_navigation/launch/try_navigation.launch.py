@@ -40,12 +40,12 @@ def generate_launch_description():
         ),
    
         #gps ekf edit
-        #Node(package='try_navigation',
-        #    executable='ekf_myself_gps',
-        #    name='sensor_fusion',
-        #    output='screen',
-        #    arguments=[]
-        #),
+        Node(package='try_navigation',
+            executable='ekf_myself_gps',
+            name='sensor_fusion',
+            output='screen',
+            arguments=[]
+        ),
         
         #pcd segmentation
         Node(package='pcd_convert',
@@ -55,12 +55,12 @@ def generate_launch_description():
             arguments=[]
         ),
         #odom wheel
-        Node(package='try_navigation',
-            executable='odom_wheel',
-            name='odom_wheel_node',
-            output='screen',
-            arguments=[]
-        ),
+        #Node(package='try_navigation',
+        #    executable='odom_wheel',
+        #    name='odom_wheel_node',
+        #    output='screen',
+        #    arguments=[]
+        #),
         
         #waypoint manager
         # waypoint gps command
