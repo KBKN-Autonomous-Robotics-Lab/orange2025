@@ -63,7 +63,7 @@ class ExtendedKalmanFilter(Node):
         ###########################
         ###IGVC20250530 add########
         self.set_yaw_satellites_no =4  #satellite count
-        self.set_yaw_count =100 #n/Hz =s
+        self.set_yaw_count =100 #n (n/Hz =s)
         
 
         self.sub_a = self.create_subscription(

@@ -43,14 +43,12 @@ class PathFollower(Node):
         # Subscriptionを作成。
         self.subscription = self.create_subscription(nav_msgs.Path, '/potential_astar_path', self.get_path, qos_profile) #set subscribe pcd topic name
         #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom/wheel_imu', self.get_odom, qos_profile_sub)
-        self.subscription = self.create_subscription(nav_msgs.Odometry,'/fusion/odom', self.get_odom, qos_profile_sub)
+        self.subscription = self.create_subscription(nav_msgs.Odometry,'/fusion/odom', self.get_odom, qos_profile_sub) # for odom
         #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom_ekf_match', self.get_odom, qos_profile_sub)
         #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom_ref_slam', self.get_odom_ref, qos_profile_sub)
-        self.subscription = self.create_subscription(nav_msgs.Odometry,'/fusion/odom', self.get_odom_ref, qos_profile_sub)
+        self.subscription = self.create_subscription(nav_msgs.Odometry,'/fusion/odom', self.get_odom_ref, qos_profile_sub) # for stop point
         self.subscription = self.create_subscription(sensor_msgs.PointCloud2, '/pcd_segment_obs', self.obs_steer, qos_profile)
         self.goal_sub = self.create_subscription(PoseStamped, '/goal_pose', self.goal_pose_callback, qos_profile)
-        self.stop_sub = self.create_subscription(String, '/stop_sign_status', self.stop_sign_callback, 10)
-        self.human_sub = self.create_subscription(String, '/human_status', self.human_callback, 10)
         self.waypoint_number_subscription = self.create_subscription(Int32,'/waypoint_number', self.get_waypoint_number, qos_profile_sub)
         self.subscription  # 警告を回避するために設置されているだけです。削除しても挙動はかわりません。
         
@@ -140,48 +138,6 @@ class PathFollower(Node):
         self.rh_obs = 0
         self.lh_obs = 0
         
-        
-        ################# IGVC SelfDrive Quolification line stop test #20250530# #################
-        self.sd_quolification_line_stop = 0 #root flag
-        #self.sd_c_obs_stop_dist = 0.305*3 + 0.0254*2 + 0.4 + 0.37# 3feat + 2inch +top +delay
-        self.sd_c_obs_stop_dist = 0.305*2 + 0.0254*2 + 0.4 + 0.37# 2feat + 2inch +top +delay
-        self.sd_c_obs_slow_dist = self.sd_c_obs_stop_dist + 1 #slow before 1m
-        ##########################################################################################   
-        
-        ################# IGVC SelfDrive III.1 function test #20250531# #################
-        self.sd_line_stop_set = 0 #root flag
-        self.time_restart = 0
-        self.time_restart_count = 50 #n/Hz = s
-        self.stop_flag_first_check = 0
-        self.sd_line_stop_set_flag = 0
-        #################################################################################
-            
-        ################# IGVC SelfDrive V.2 function test #20250601# #################
-        self.sd_human_stop = 0 #root flag
-        self.sd_human_stop_dist = 0.305*6 + 0.0254*2 + 0.4 + 0.87# 6feat + 2inch +top +delay
-        self.sd_c_obs_stop_dist_buff = self.sd_c_obs_stop_dist
-        if self.sd_human_stop == 1:
-            self.sd_c_obs_stop_dist = self.sd_human_stop_dist 
-        #################################################################################
-        
-        ################# IGVC SelfDrive Full #20250601# #################
-        self.sd_full_flag = 1 #root flag
-        self.waypoint_number = 0
-        self.sd_full_human_stop = 1  #sub flag
-        if self.sd_full_human_stop == 1:
-            self.sd_c_obs_stop_dist = self.sd_human_stop_dist
-        self.sd_full_sign_stop = 1 #sub flag
-        if self.sd_full_sign_stop == 1:
-            dist = 0.5 + 0.4 + 0.5# eria +top +delay
-            sd_full_stop_xy = [-32.37441428909107, -16.465277566213718, 0.0]
-            self.stop_xy = np.array([
-                #xmin,      xmax,    ymin,   ymax, flag
-                [ sd_full_stop_xy[0]-dist,    sd_full_stop_xy[0]+dist -0.73,     sd_full_stop_xy[1]-2*dist,    sd_full_stop_xy[1]+2*dist, 1.0], #stop point set
-                [ 999,  999, 999, 999, 0.0] ]) #end
-        self.previous_status = None    
-        self.human_status = None    
-        ##################################################################
-        
     # actionリクエストの受信時に呼ばれる(tuika)
     def listener_callback(self, goal_handle):
         self.get_logger().info(f"Received goal with a: {goal_handle.request.a}, b: {goal_handle.request.b}")
@@ -226,35 +182,9 @@ class PathFollower(Node):
         
         xyz = np.vstack((x,y,z))
         
-        
-        ################# IGVC SelfDrive III.1 function test #20250531# #################
-        if self.sd_line_stop_set == 1 :
-            dist = 0.305 + 0.4 #+ 0.5# feat +top +delay
-            self.stop_xy = np.array([ 
-                #xmin,      xmax,    ymin,   ymax, flag
-                [ x-dist,    x+1.5,     y-1.5,    y+1.5, 1.0], #stop point set
-                [ 999,  999, 999, 999, 0.0] ]) #end
-            self.sd_line_stop_set = 0;
-            self.stop_num = 0;
-            self.time_restart = 1
-            self.sd_line_stop_set_flag = 1
-            self.get_logger().info(f"self.stop_xy: {self.stop_xy}") 
-                  
-        #################################################################################
-        
         self.get_logger().info(f"Received goal: x={x:.3f}, y={y:.3f}")    
         #self.get_logger().info(f"self.waypoints_array:{self.waypoints_array}")    
         #self.get_logger().info(f"xyz_range:{xyz_range}")
-    
-    # stop_sign_status トピックのコールバック
-    def stop_sign_callback(self, msg):
-        # 現在の状態が "Stop" になったら stop_flag を True にする
-        self.previous_status = msg.data   
-    
-    # human_status トピックのコールバック
-    def human_callback(self, msg):
-        # 現在の状態が "Stop" になったら stop_flag を True にする
-        self.human_status = msg.data       
    
     def get_waypoint_number(self, msg):
         #get waypoint number
@@ -290,12 +220,6 @@ class PathFollower(Node):
         speed_set = 0.55#55 AutoNav 1.10
         speed = speed_set
         
-        ################# IGVC SelfDrive Full #20250601# #################
-        if self.sd_full_flag == 1 :
-            if self.waypoint_number == 18:
-                speed = speed_set#0.35
-        ##################################################################
-        
         points = self.obs_points 
         obs_theta = np.arctan2(points[1,:],points[0,:]) * 180/math.pi #arctan2(y,x)
         obs_dist = np.sqrt(points[0,:]**2 + points[1,:]**2)
@@ -326,7 +250,7 @@ class PathFollower(Node):
             #    target_theta = 0.0#-lim_steer
             #    target_rad = target_theta/180*math.pi
             #self.get_logger().info('rrrrrrrrrr go right rrrrrrrrrrrrrrrrr')
-        elif np.any(r_obs) and ~np.any(l_obs) and np.any(c_obs_near) :
+        elif np.any(r_obs) and ~np.any(l_obs) and np.any(c_obs_near) : ##tokuni ayashii!!!!!!!!
             speed = 0.0
             target_rad, target_theta = self.set_target_rad(path, position_x, position_y, self.target_dist_near, theta_x, theta_y, theta_z)
             #if abs(target_theta) < 3: #250530 off
@@ -334,7 +258,7 @@ class PathFollower(Node):
             #    #target_theta = lim_steer
             #    #target_rad = lim_steer/180*math.pi
             #self.get_logger().info('ccccccccccccccccc c_obs_near lllllllllllllll')
-        elif ~np.any(r_obs) and np.any(l_obs) and np.any(c_obs_near) :
+        elif ~np.any(r_obs) and np.any(l_obs) and np.any(c_obs_near) : ##tokuni ayashii!!!!!!!
             speed = 0.0
             target_rad, target_theta = self.set_target_rad(path, position_x, position_y, self.target_dist_near, theta_x, theta_y, theta_z)
             #if abs(target_theta) < 3: #250530 off
@@ -379,119 +303,6 @@ class PathFollower(Node):
             speed = -0.10
         if np.any(c_obs_back) :
             speed = 0.10
-        
-        
-        ################# IGVC SelfDrive Full #20250601# #################
-        if self.sd_full_flag == 1:
-            
-            ################# IGVC SelfDrive full sign stop #20250601# ################
-            ###### stop1 #######
-            if self.sd_full_sign_stop == 1: #flow 1-1
-                if self.waypoint_number == 6:
-                    self.time_restart = 1
-                    self.sd_full_sign_stop = 2
-            if self.sd_full_sign_stop == 2: #flow 1-2
-                #if self.previous_status == "Stop":
-                #    self.time_restart = 0
-                #    self.sd_full_sign_stop = 0
-                #    self.stop_flag_first_check = 0
-                if self.stop_flag == 0:
-                    self.stop_flag_first_check = 1
-                if self.time_restart == 1 and self.stop_flag == 1:
-                    if self.stop_flag_first_check == 1:
-                        self.time_restart_count -= 1
-                    if self.time_restart_count < 0:
-                        self.time_restart = 0
-                        self.stop_flag = 0
-                if self.waypoint_number == 9: # fail safe
-                    self.time_restart = 0
-                    self.stop_flag_first_check = 0
-                    self.sd_full_sign_stop = 3
-            
-            ###### stop2 #######
-            if self.sd_full_sign_stop == 3: #flow 2-1
-                if self.waypoint_number == 18:
-                    self.time_restart = 1
-                    self.time_restart_count = 50
-                    self.sd_full_sign_stop = 4
-            if self.sd_full_sign_stop == 4: #flow 2-2
-                if self.previous_status == "Stop":
-                    self.stop_flag = 1
-                    self.stop_flag_first_check = 1
-                    self.sd_full_sign_stop = 5
-            if self.sd_full_sign_stop == 5: #flow 2-3
-                if self.time_restart == 1 and self.stop_flag == 1:
-                    if self.stop_flag_first_check == 1: # kono if hontoha iranai yo
-                        self.time_restart_count -= 1
-                    if self.time_restart_count < 0:
-                        self.time_restart = 0
-                        self.stop_flag = 0
-                if self.waypoint_number == 20: # fail safe
-                    self.time_restart = 0
-                    self.stop_flag_first_check = 0
-                    self.sd_full_sign_stop = 0
-            ###################
-            
-            ###########################################################################
-
-            ################# IGVC SelfDrive full human stop #20250601# ###############
-            if self.sd_full_human_stop == 1:
-                if self.waypoint_number == 9:
-                    self.sd_quolification_line_stop = 1
-                    self.sd_human_stop = 1
-                    self.sd_full_human_stop = 2
-            if self.sd_full_human_stop == 2: #fail safe
-                if self.human_status == "Stop":
-                    self.time_restart = 1
-                    self.time_restart_count = 10
-                    self.sd_full_human_stop = 3
-            if self.sd_full_human_stop == 3: #flow3
-                if self.time_restart == 1 and self.stop_flag == 1:
-                    if self.human_status == "Go":
-                        self.time_restart_count -= 1
-                    if self.time_restart_count < 0:
-                        self.time_restart = 0
-                        self.stop_flag = 0
-                if self.waypoint_number == 12:
-                   self.sd_quolification_line_stop = 0
-                   self.sd_human_stop = 0
-                   self.sd_full_human_stop = 0
-            ###########################################################################
-            
-        ##################################################################
-        
-        
-        ################# IGVC SelfDrive Quolification line stop test #20250530# #################
-        if self.sd_quolification_line_stop == 1:
-            #self.stop_flag = 0
-            sd_c_obs_stop = ( -30<obs_theta) * (obs_theta<  30) * (obs_dist< self.sd_c_obs_stop_dist)
-            sd_c_obs_slow = ( -60<obs_theta) * (obs_theta<  60) * (obs_dist< self.sd_c_obs_slow_dist)
-            if np.any(sd_c_obs_stop):
-                speed = 0.0
-                self.stop_flag = 1
-                
-                ################# IGVC SelfDrive V.2 function test #20250601# ###############
-                if self.sd_human_stop == 1:
-                    self.sd_c_obs_stop_dist = self.sd_c_obs_stop_dist_buff
-                #############################################################################
-                
-            elif np.any(sd_c_obs_slow):
-                speed = 0.4
-        ##########################################################################################
-        
-        
-        ################# IGVC SelfDrive III.1 function test #20250531# ###############
-        if self.sd_line_stop_set_flag == 1:
-            if self.stop_flag == 0:
-                self.stop_flag_first_check = 1
-            if self.time_restart == 1 and self.stop_flag == 1:
-                if self.stop_flag_first_check == 1:
-                    self.time_restart_count -= 1
-                if self.time_restart_count < 0:
-                    self.time_restart = 0
-                    self.stop_flag = 0
-        #################################################################################
-        
         
         #elif abs(target_theta)  > 90:
         #    speed = 0.2
