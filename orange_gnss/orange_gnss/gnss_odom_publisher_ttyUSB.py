@@ -26,6 +26,7 @@ class GPSData(Node):
         self.country_id = self.get_parameter('country_id').get_parameter_value().integer_value
         self.Position_magnification = self.get_parameter('Position_magnification').get_parameter_value().double_value
         #self.theta = self.get_parameter('heading').get_parameter_value().double_value
+        self.tsukuba_theta=90
 
         self.initial_coordinate = None
         self.fix_data = None
@@ -62,7 +63,11 @@ class GPSData(Node):
         request = Avglatlon.Request()
         request.avg_lat = self.initial_coordinate[0]  # ← average lat
         request.avg_lon = self.initial_coordinate[1]  # ← average lon
-        request.theta = self.theta
+        request.current_lat = self.current_coordinate[0]  # ← current lat
+        request.current_lon = self.current_coordinate[1]  # ← current lon
+        #request.theta = self.theta
+        request.theta = self.tsukuba_theta # tsukuba start theta
+        request.current_theta = self.theta # for tsukuba
 
         future = self.client.call_async(request)
         future.add_done_callback(self.response_callback)
@@ -104,7 +109,9 @@ class GPSData(Node):
             time.sleep(0.1)  # Slight delay to avoid overwhelming the GPS device
 
         if count > 0:
-            self.initial_coordinate = [lat_sum / count, lon_sum / count]
+            #self.initial_coordinate = [lat_sum / count, lon_sum / count] # calculate average
+            self.initial_coordinate = [36.0497502, 140.0459234] # tsukuba start point
+            self.current_coordinate = [lat_sum / count, lon_sum / count] # for tsukuba
             self.theta = (heading_sum / count) - 90
             self.initialized = True
             self.get_logger().info(f"Initial coordinate set to: {self.initial_coordinate}")
