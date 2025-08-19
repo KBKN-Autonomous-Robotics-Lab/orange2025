@@ -498,6 +498,9 @@ class MotorDriverNode(Node):
         while not read_success:
             result = self.client.read_holding_registers(
                 ADDR, WORD, slave=self.ID)
+            if result.isError():
+                self.get_logger().error(f"Modbus read error at address {ADDR}: {result}")
+                continue  # Try again
             try:
                 for i in range(WORD):
                     reg[i] = result.registers[i]
