@@ -250,7 +250,7 @@ class GPSData(Node):
 
     def heading_to_quat(self ,real_heading):
 
-        robotheading = real_heading + 90
+        robotheading = real_heading - 90
         if robotheading >= 360:
             robotheading -= 360
 
@@ -366,7 +366,7 @@ class GPSData(Node):
     
     def publish_movingbase(self, heading):
         if heading is not None and heading != 0.0:
-            robotheading = heading + 90.0
+            robotheading = heading - 90.0
             if robotheading >= 360.0:
                 robotheading -= 360.0
 

@@ -14,7 +14,7 @@ class GPSodom_correction(Node):
         super().__init__('GPSodom_correction')
 
         self.create_subscription(
-            Odometry, "/odom/gps", self.odomgps_callback, 1)
+            Odometry, "/odom/UM982", self.odomgps_callback, 1)
         self.create_subscription(
             Imu, "/livox/imu", self.imu_callback, 1)
 
