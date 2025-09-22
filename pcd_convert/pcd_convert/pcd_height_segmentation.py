@@ -41,7 +41,7 @@ class PcdHeightSegmentation(Node):
         
         #パラメータ
         #set obs range
-        self.OBS_HIGHT_MIN =   555/1000; #hight range[m]
+        self.OBS_HIGHT_MIN =   200/1000; #hight range[m]
         self.OBS_HIGHT_MAX =  4000/1000; #hight range[m]
         self.OBS_MASK_X_MIN = -550/1000; #x mask range[m]
         self.OBS_MASK_X_MAX =  400/1000; #x mask range[m]
@@ -51,7 +51,7 @@ class PcdHeightSegmentation(Node):
         self.GROUND_HIGHT_MIN = -10/1000; #hight range[m] # IGVC20250601 -150 -> -10
         self.GROUND_HIGHT_MAX =  150/1000; #hight range[m]
         #set step range
-        self.STEP_HIGHT_MIN =   550/1000; #hight range[m]
+        self.STEP_HIGHT_MIN =   200/1000; #hight range[m]
         self.STEP_HIGHT_MAX =   self.OBS_HIGHT_MIN# 200/1000; #hight range[m]
         self.STEP_X_MIN     = -1500/1000; #x mask range[m]
         self.STEP_X_MAX     =  2000/1000; #x mask range[rosbag2_2024_10_26-03_14_14_20241026_kakunin_bag1m]
