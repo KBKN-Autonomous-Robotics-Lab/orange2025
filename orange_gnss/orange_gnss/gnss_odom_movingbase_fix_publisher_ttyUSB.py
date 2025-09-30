@@ -101,7 +101,7 @@ class GPSData(Node):
         self.gps_data_cache = self.get_gps_quat(self.dev_name, self.country_id)
 
         if self.gps_data_cache:
-            fix_type, lat, lon, alt, _, heading = self.gps_data_cache
+            fix_type, lat, lon, alt, satelitecount_data, heading = self.gps_data_cache
             if fix_type != 0:
                 self.publish_fix(self.gps_data_cache)
                 self.publish_odom(lat, lon, alt)
@@ -369,6 +369,8 @@ class GPSData(Node):
         self.lonlat_msg.latitude = gps[1]
         self.lonlat_msg.longitude = gps[2]
         self.lonlat_msg.altitude = gps[3]
+        
+        self.lonlat_msg.status.service = gps[4] # satelitecount
 
         self.lonlat_pub.publish(self.lonlat_msg)
             # self.get_logger().info(f"Published GPS data: {lonlat}")
