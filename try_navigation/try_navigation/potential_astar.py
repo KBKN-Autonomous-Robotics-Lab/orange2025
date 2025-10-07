@@ -108,7 +108,7 @@ class PotentialAStar(Node):
         self.cg2nd=20 #ポテンシャルの引力パラメータ
         self.lg2nd=20 #ポテンシャルの引力パラメータ
         self.co2nd=11 #ポテンシャルの斥力パラメータ SICKパラ目：co=11;lo=0.55;
-        self.lo2nd=0.22#55 #0.5#0.9#ポテンシャルの斥力パラメータ  24/11/29 ok IGVC20250601 0.25 -> 0.22
+        self.lo2nd=0.21#55 #0.5#0.9#ポテンシャルの斥力パラメータ  24/11/29 ok IGVC20250601 0.25 -> 0.22
         #self.lo2nd=0.30#55 #0.5#0.9#ポテンシャルの斥力パラメータ
         
         
@@ -175,6 +175,11 @@ class PotentialAStar(Node):
             [   0,      0,    0,       0,        1,        0,       0,      0], # waypoint 20 front r lane
             [   0,      0,    0,       0,        1,        0,       0,      0]  # waypoint 21 GOAL!!!!!!
         ]
+        
+        tukuba_obs_x =np.linspace(-45,25,860);
+        tukuba_obs_y =np.linspace(97,92,860);
+        tukuba_obs_z =np.linspace(0,0,860);
+        self.tsukuba_obs = np.array([tukuba_obs_x, tukuba_obs_y, tukuba_obs_z]);
         
         
         ################# IGVC SelfDrive Quolification line stop test #20250530# #################
@@ -424,6 +429,14 @@ class PotentialAStar(Node):
         else:
             relative_point_rot = np.array([[],[],[]])
         """    
+        #map_obs add
+        if len(self.tsukuba_obs[0,:])>0:
+            relative_point_x = self.tsukuba_obs[0,:] - self.position_x
+            relative_point_y = self.tsukuba_obs[1,:] - self.position_y
+            relative_point = np.array((relative_point_x, relative_point_y, self.tsukuba_obs[2,:]))
+            relative_point_rot, t_point_rot_matrix = rotation_xyz(relative_point, self.theta_x, self.theta_y, -self.theta_z)
+        else:
+            relative_point_rot = np.array([[],[],[]])
         ###################################
                 
         #obs round&duplicated  :grid_size before:28239 after100:24592 after50:8894 after10:3879
@@ -456,7 +469,8 @@ class PotentialAStar(Node):
         if dot_line_local.shape[1] > 0:
             obs_points = np.insert(obs_points, len(obs_points[0,:]), dot_line_local.T, axis=1)
         
-        #obs_points = np.insert(obs_points, len(obs_points[0,:]), relative_point_rot.T, axis=1)
+        obs_points = np.insert(obs_points, len(obs_points[0,:]), relative_point_rot.T, axis=1)
+        #obs_points = np.insert(obs_points, len(obs_points[0,:]), self.tsukuba_obs.T, axis=1)
         points_round = np.round(obs_points * self.obs_pixel) / self.obs_pixel
         obs_xy_local = points_round[:,~pd.DataFrame({"x":points_round[0,:], "y":points_round[1,:]}).duplicated()]
         obs_xy = np.vstack((obs_xy_local[0,:], obs_xy_local[1,:]))
