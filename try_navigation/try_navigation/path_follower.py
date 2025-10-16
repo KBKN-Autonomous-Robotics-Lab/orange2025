@@ -15,6 +15,9 @@ from my_msgs.action import StopFlag ####
 from geometry_msgs.msg import PoseStamped
 from std_msgs.msg import Int32
 from std_msgs.msg import String
+from visualization_msgs.msg import Marker, MarkerArray
+from builtin_interfaces.msg import Duration  
+
 
 # C++と同じく、Node型を継承します。
 class PathFollower(Node):
@@ -60,7 +63,8 @@ class PathFollower(Node):
         
         # Publisherを作成
         self.cmd_vel_publisher = self.create_publisher(geometry_msgs.Twist, 'cmd_vel', qos_profile) #set publish pcd topic name
-        
+        self.marker_pub = self.create_publisher(MarkerArray, 'wall_follow_markers', 10)
+
         #パラメータ init
         self.path_plan = np.array([[0],[0],[0]])
         
@@ -181,6 +185,27 @@ class PathFollower(Node):
         self.previous_status = None    
         self.human_status = None    
         ##################################################################
+
+        ####################   Wall-Follower Specific Params    #########################
+
+        self.wall_follow_intervals = [(5, 12)]   # (start_waypoint, end_waypoint)
+        self.wall_follow_side = 'right'          # 'right' or 'left' depends on which wall u follow
+        # ロボット座標系で見た検出ボックス（前方 x 範囲, 右側 y 範囲）
+        self.wf_x_min = 0.0
+        self.wf_x_max = 3.0
+        # 右側の y は負（例: -1.5 〜 -0.2）
+        self.wf_y_min = -1.5
+        self.wf_y_max = -0.2
+        # 壁の高さフィルタ（m）
+        self.wf_z_min = 0.3
+        self.wf_z_max = 1.0
+        # 壁からの標準距離とゲイン
+        self.wf_desired_dist = 0.4    # 目標距離[m]
+        self.wf_k_dist = 1.0          # m -> rad の換算ゲイン（調整）
+        self.wf_min_points = 25       # フィットに必要な最低点数
+        self.wf_speed = 0.25          # 基本速度[m/s]（狭路）
+
+        #################################################################################
         
     # actionリクエストの受信時に呼ばれる(tuika)
     def listener_callback(self, goal_handle):
@@ -379,7 +404,17 @@ class PathFollower(Node):
             speed = -0.10
         if np.any(c_obs_back) :
             speed = 0.10
-        
+
+        ####wall follow  overwrite####
+        if self.in_wall_follow_interval():
+            wf_res = self.wall_follow_control()
+            if wf_res is not None:
+                speed, target_rad = wf_res
+                target_theta = target_rad * 180.0 / math.pi
+                # ここで即座に PD 平滑化（ラジアンで扱う）
+                target_rad = self.sensim0(target_rad)
+        #self.get_logger().info(f"WF active: speed={speed:.2f}, target_rad={target_rad:.3f} (deg={target_theta:.1f}), pts={pts_side.shape[1]}")
+
         
         ################# IGVC SelfDrive Full #20250601# #################
         if self.sd_full_flag == 1:
@@ -498,7 +533,7 @@ class PathFollower(Node):
         #else:
         #    speed = 0.2
         #self.get_logger().info('speed = %f' % (speed))
-        target_theta = target_theta +90/180*math.pi
+        target_theta = target_theta +90     ######/180*math.pi
         target_rad_pd = self.sensim0(target_rad)
         #target_rad_pd = target_rad
         
@@ -619,10 +654,166 @@ class PathFollower(Node):
         else:
             self.lh_obs = 0
 
-    def pcd_serch(self, pointcloud, x_min, x_max, y_min, y_max):
-        pcd_ind = (( (x_min <= pointcloud[0,:]) * (pointcloud[0,:] <= x_max)) * ((y_min <= pointcloud[1,:]) * (pointcloud[1,:]) <= y_max ) )
-        pcd_mask = pointcloud[:, pcd_ind]
-        return pcd_mask
+    # pcd_serch を z も考慮する形で置換（点群抽出用ユーティリティ）
+    def pcd_serch(self, pointcloud, x_min, x_max, y_min, y_max, z_min=None, z_max=None):
+        """
+        pointcloud: 4 x N array (x,y,z,intensity)
+        returns: filtered 4 x M array
+        """
+        mask = ((pointcloud[0, :] >= x_min) & (pointcloud[0, :] <= x_max) &
+                (pointcloud[1, :] >= y_min) & (pointcloud[1, :] <= y_max))
+        if z_min is not None and z_max is not None:
+            mask = mask & ((pointcloud[2, :] >= z_min) & (pointcloud[2, :] <= z_max))
+        return pointcloud[:, mask]
+
+    def fit_line_pca(self, pts_xy):
+        """
+        pts_xy: 2 x N numpy array (x; y) in robot frame
+        returns: (centroid (2,), tangent_unit (2,)) or None if insufficient points / invalid input
+        - Uses PCA (covariance -> eigenvector) to get principal direction (tangent).
+        - Expects pts_xy.shape == (2, N).
+        """
+        # --- 基本的な入力チェック ---
+        if pts_xy is None:
+            return None
+        # 形が 2 x N でないなら None
+        if pts_xy.ndim != 2 or pts_xy.shape[0] != 2:
+            return None
+
+        # 最低点数チェック（クラスのパラメータ名と一致させる）
+        min_pts = getattr(self, 'wf_min_points', 10)
+        if pts_xy.shape[1] < min_pts:
+            return None
+
+        # --- centroid と共分散行列計算 ---
+        cx = np.mean(pts_xy[0, :])
+        cy = np.mean(pts_xy[1, :])
+        X = pts_xy - np.array([[cx], [cy]])  # 2 x N
+
+        cov = np.cov(X)  # 2 x 2
+        # 対称行列なので eigh を使う（数値安定）
+        w, v = np.linalg.eigh(cov)  # w: eigenvalues (ascending), v: eigenvectors (columns)
+
+        # 最大固有値に対応する固有ベクトルが接線（tangent）
+        tangent = v[:, np.argmax(w)]
+        norm = np.linalg.norm(tangent)
+        if norm == 0 or not np.isfinite(norm):
+            return None
+        tangent = tangent / norm
+
+        return np.array([cx, cy]), tangent
+
+    def in_wall_follow_interval(self):
+        # waypoint_number が interval のどれかに入っているか
+        for (s, e) in self.wall_follow_intervals:
+            if s <= getattr(self, 'waypoint_number', 0) <= e:
+                return True
+        return False
+
+    def wall_follow_control(self):
+        """
+        returns (speed, target_rad) in robot frame (rad). 
+        If cannot compute (e.g. not enough points), return None.
+        """
+        pts = self.obs_points  # 4 x N in robot frame
+        if pts.size == 0 or pts.shape[1] == 0:
+            return None
+
+        # apply z-height + right-side box (use params defined in __init__)
+        pts_side = self.pcd_serch(pts, self.wf_x_min, self.wf_x_max,
+                                  self.wf_y_min, self.wf_y_max,
+                                  z_min=self.wf_z_min, z_max=self.wf_z_max)
+        if pts_side.shape[1] < self.wf_min_points:
+            return None
+
+        res = self.fit_line_pca(pts_side[:2, :])
+        if res is None:
+            return None
+        centroid, tangent = res
+
+        normal = np.array([-tangent[1], tangent[0]])
+        signed_dist = float(np.dot(centroid, normal))
+
+        desired_signed = -abs(self.wf_desired_dist)  # right-side -> negative
+        lat_error = desired_signed - signed_dist
+
+        # ensure tangent points to global -x (robot frame conversion)
+        robot_yaw = math.radians(self.theta_z)
+        R = np.array([[math.cos(robot_yaw), -math.sin(robot_yaw)],
+                      [math.sin(robot_yaw),  math.cos(robot_yaw)]])
+        tangent_global = R.dot(tangent)
+        if tangent_global[0] > 0:
+            tangent = -tangent
+            normal = -normal
+            signed_dist = -signed_dist
+            lat_error = desired_signed - signed_dist
+
+        target_tangent_angle = math.atan2(tangent[1], tangent[0])
+        correction_rad = self.wf_k_dist * lat_error
+        target_rad = target_tangent_angle + correction_rad
+
+        pts_forward = self.pcd_serch(pts, 0.0, 0.6, -0.3, 0.3, z_min=self.wf_z_min, z_max=self.wf_z_max)
+        speed = self.wf_speed
+        if pts_forward.shape[1] > 8:
+            speed = 0.0
+
+        return speed, target_rad
+        # 2) Marker を作るユーティリティ（PathFollower クラスに追加）
+    def publish_wall_follow_markers(self, centroid=None, tangent=None, pts_side=None,active=False, signed_dist=None, detection_box=None, front_obstacle=False):
+        """
+        centroid: np.array([cx,cy]) in robot frame or None
+        tangent: np.array([tx,ty]) unit vector in robot frame or None
+        pts_side: 4 x N points (subset) or None
+        active: Boolean (壁追従モードか)
+        signed_dist: float or None
+        detection_box: dict with keys x_min,x_max,y_min,y_max,z_min,z_max (optional) to show box
+        front_obstacle: bool -> show red warning
+        """
+        ma = MarkerArray()
+        now = self.get_clock().now().to_msg()
+        ns = "wall_follow"
+
+        # 0) Mode box / big indicator - left-top like
+        m0 = Marker()
+        m0.header.frame_id = "odom"   # or the frame you use for robot-frame markers
+        m0.header.stamp = now
+        m0.ns = ns
+        m0.id = 0
+        m0.type = Marker.CUBE
+        m0.action = Marker.ADD
+        # place at robot left-front corner in RViz view (slightly above)
+        m0.pose.position.x = 0.0
+        m0.pose.position.y = 0.0
+        m0.pose.position.z = 1.6
+        m0.pose.orientation.w = 1.0
+        m0.scale.x = 0.25
+        m0.scale.y = 0.25
+        m0.scale.z = 0.05
+        if active:
+            m0.color.r = 0.0; m0.color.g = 1.0; m0.color.b = 0.0; m0.color.a = 0.9
+        else:
+            m0.color.r = 1.0; m0.color.g = 0.0; m0.color.b = 0.0; m0.color.a = 0.9
+        m0.lifetime = Duration(sec=0, nanosec=200000000)  # 0.2s
+        ma.markers.append(m0)
+
+        if centroid is not None:
+            m1 = Marker()
+            m1.header.frame_id = "base_link"
+            m1.header.stamp = now
+            m1.ns = ns
+            m1.id = 1
+            m1.type = Marker.SPHERE
+            m1.action = Marker.ADD
+            m1.pose.position.x = float(centroid[0])
+            m1.pose.position.y = float(centroid[1])
+            m1.pose.position.z = 1.0  # show at wall height
+            m1.pose.orientation.w = 1.0
+            m1.scale.x = 0.12
+            m1.scale.y = 0.12
+            m1.scale.z = 0.12
+            m1.color.r = 0.0; m1.color.g = 0.8; m1.color.b = 0.8; m1.color.a = 0.9
+            m1.lifetime = std_msgs.Duration(sec=0, nanosec=200000000)
+            ma.markers.append(m1)
 
 def rotation_xyz(pointcloud, theta_x, theta_y, theta_z):
     theta_x = math.radians(theta_x)

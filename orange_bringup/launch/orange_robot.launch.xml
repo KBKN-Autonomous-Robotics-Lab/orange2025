@@ -112,12 +112,12 @@
   <!-- GPSposition_publisher -->
   <!-- initial heading:housei nakaniwa=179.169287 tsukuba= 276.5 -->
   <!-- GPSheading_publisher -->
-  <node pkg="orange_gnss" exec="gnss_odom_movingbase_fix_publisher_ttyUSB" output="screen">
+  <node pkg="orange_gnss" exec="gnss_odom_publisher_ttyUSB" output="screen">
     <param name="port" value="/dev/sensors/GNSS_UM982"/>
     <param name="baud" value="115200"/>
     <param name="country_id" value="0"/>
     <param name="Position_magnification" value="1.675"/>
-    <param name="heading" value="93.0"/>
+    <param name="heading" value="180.0"/>
     <param name="time_out" value="1.0"/>
   </node>
   <!-- 

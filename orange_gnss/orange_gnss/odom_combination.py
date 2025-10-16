@@ -22,23 +22,25 @@ class Odom_Combination(Node):
         )
         
         # subscription
-        self.odom_sub = self.create_subscription(Odometry, '/odom', self.get_odom, qos_profile)
+        self.odom_sub = self.create_subscription(Odometry, '/odom/wheel_spimu', self.get_odom, qos_profile)
+        self.gps_odom_sub = self.create_subscription(Odometry, '/odom/UM982', self.get_gps_odom, qos_profile)
         
         # publisher
         self.odom_pub = self.create_publisher(Odometry, '/odom/combine', qos_profile)
         
         # service
-        self.avg_gps_service = self.create_service(Avglatlon, 'send_avg_gps', self.receive_avg_gps_callback)
+        #self.avg_gps_service = self.create_service(Avglatlon, 'send_avg_gps', self.receive_avg_gps_callback)
 
         self.position_x = 0.0
         self.position_y = 0.0
         self.theta_z = 0.0
         self.theta = 0.0
-        self.initial_xy = (0.0, 0.0)
-        self.Position_magnification = 1.0  # 必要なら調整
+        self.initial_xy = None #(0.0, 0.0)
+        #self.Position_magnification = 1.0  # 必要なら調整
 
         self.timer = self.create_timer(0.1, self.combine)
-
+    
+    # /odom callback
     def get_odom(self, msg):
         '''
         self.position_x = msg.pose.pose.position.x
@@ -54,6 +56,15 @@ class Odom_Combination(Node):
         roll, pitch, yaw = quaternion_to_euler(x, y, z, w)
         self.theta_z = yaw  # 単位はラジアンのままでOK
     
+    # /odom/UM982 callback
+    def get_gps_odom(self, msg):
+        if self.initial_xy is None:
+            init_x = msg.pose.pose.position.x
+            init_y = msg.pose.pose.position.y
+            self.initial_xy = (init_x, init_y)
+            self.get_logger().info(f"Initial /odom/UM982 position set to: x={init_x:.3f}, y={init_y:.3f}")   
+    
+    '''
     def conversion(self, coordinate, origin, theta):
         ido = coordinate[0]
         keido = coordinate[1]
@@ -117,7 +128,8 @@ class Odom_Combination(Node):
         point = (h_y, -h_x)
 
         return point    
-    
+    '''
+    '''
     def receive_avg_gps_callback(self, request, response):
         avg_lat, avg_lon, current_lat, current_lon, theta = request.avg_lat, request.avg_lon, request.current_lat, request.current_lon, request.current_theta
         if theta == 0.0:
@@ -130,35 +142,37 @@ class Odom_Combination(Node):
         initial_coordinate = [avg_lat, avg_lon]
         self.initial_xy = self.conversion(current_coordinate, initial_coordinate, theta)
         xy_np = np.array(self.initial_xy)
-
+    '''
     def yaw_to_orientation(self, yaw):
         orientation_z = np.sin(yaw / 2.0)
         orientation_w = np.cos(yaw / 2.0)
         return orientation_z, orientation_w
     
     def combine(self):
+        if self.initial_xy is None:
+            self.get_logger().warn("Waiting for initial /odom/UM982 position...")
+            return
+            
         pos_x = self.position_x
         pos_y = self.position_y
-        degree_to_radian = math.pi / 180
-        pos_theta = self.theta * degree_to_radian # maybe -self.theta * degree_to_radian
-        
+        #degree_to_radian = math.pi / 180
+        #pos_theta = self.theta * degree_to_radian # maybe -self.theta * degree_to_radian
+        pos_theta = self.theta_z
         # conversionによるxy変換結果（初期座標）
         #delta_x, delta_y = self.initial_xy
 
         # theta_z（現在の向き）で回転
-        cos_theta = math.cos(pos_theta)
-        sin_theta = math.sin(pos_theta)
+        #cos_theta = math.cos(pos_theta)
+        #sin_theta = math.sin(pos_theta)
 
-        #rotated_x = cos_theta * delta_x - sin_theta * delta_y
-        #rotated_y = sin_theta * delta_x + cos_theta * delta_y
-        rotated_x = cos_theta * pos_x - sin_theta * pos_y
-        rotated_y = sin_theta * pos_x + cos_theta * pos_y
+        #rotated_x = cos_theta * pos_x - sin_theta * pos_y
+        #rotated_y = sin_theta * pos_x + cos_theta * pos_y
 
         # 加算して新しい位置
-        #combined_x = self.position_x + rotated_x
-        #combined_y = self.position_y + rotated_y
-        combined_x = self.initial_xy[0] + rotated_x
-        combined_y = self.initial_xy[1] + rotated_y
+        #combined_x = self.initial_xy[0] + rotated_x
+        #combined_y = self.initial_xy[1] + rotated_y
+        combined_x = self.initial_xy[0] + pos_x
+        combined_y = self.initial_xy[1] + pos_y
                 
         # quartanion z,w
         odom_orientation = self.yaw_to_orientation(pos_theta)

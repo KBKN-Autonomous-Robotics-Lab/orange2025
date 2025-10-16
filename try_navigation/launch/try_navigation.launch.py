@@ -5,6 +5,9 @@ from launch import LaunchDescription
 from launch_ros.actions import Node
 from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
 
 def generate_launch_description():
     rviz_config_dir = os.path.join(
@@ -18,7 +21,26 @@ def generate_launch_description():
         'livox_to_pointcloud2.launch.py'
     )
     
+    # define config
+    odom = LaunchConfiguration('odom')
+    declare_odom_arg = DeclareLaunchArgument(
+        'odom',
+        default_value='/fusion/odom',
+        description='Odometry topic name'
+    )
+    
+    waypoint_path = LaunchConfiguration('waypoint_path')
+    declare_waypoint_arg = DeclareLaunchArgument(
+        'waypoint_path',
+        default_value='kbkn_maps/waypoints/hosei/2025/nakaniwa_tsukuba.yaml',
+        description='waypoint name'
+    )
+    
+    
+    
     return LaunchDescription([
+        declare_odom_arg, declare_waypoint_arg,
+        
         #rviz2
         Node(package='rviz2',
             executable='rviz2',
@@ -68,6 +90,8 @@ def generate_launch_description():
             executable='gps_waypoint',
             name='gps_waypoint',
             output='screen',
+            parameters=[{'odom': odom},
+                        {'waypoint_path': waypoint_path}],
             arguments=[],
         ),
         # $ ros2 run navigation_control gps_waypoint
@@ -85,6 +109,7 @@ def generate_launch_description():
             executable='potential_astar',
             name='potential_astar_node',
             output='screen',
+            parameters=[{'odom': odom}],
             arguments=[],
         ),
         #robot ctrl
@@ -92,6 +117,7 @@ def generate_launch_description():
             executable='path_follower',
             name='path_follower_node',
             output='screen',
+            parameters=[{'odom': odom}],
             arguments=[],
         ),
         

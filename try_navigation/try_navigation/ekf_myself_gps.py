@@ -67,7 +67,7 @@ class ExtendedKalmanFilter(Node):
         
 
         self.sub_a = self.create_subscription(
-            Odometry, '/odom/wheel_spimu', self.sensor_a_callback, 10) # /odom/wheel_spimu
+            Odometry, '/odom/combine', self.sensor_a_callback, 10) # /odom/wheel_spimu
         self.sub_b = self.create_subscription(
             Odometry, '/odom/UM982', self.sensor_b_callback, 10)
         #self.sub_b = self.create_subscription(
@@ -164,7 +164,7 @@ class ExtendedKalmanFilter(Node):
     def determination_of_R(self):
         if self.GpsXY is not None:
             #カルマンフィルタのデッドレコニングよりになる範囲を指定
-            if (-38<self.GpsXY[0]) and (self.GpsXY[0]<60) and (25 < self.GpsXY[1]) and (self.GpsXY[1]<110):
+            if (-60<self.GpsXY[0]) and (self.GpsXY[0]<60) and (25 < self.GpsXY[1]) and (self.GpsXY[1]<110):
                 #self.gps_rr_flag = 1
                 self.gps_rr_flag = 0 #self.gps_rr_flag =1はGPS受信精度よく、0でGPS受信精度低い範囲に入ったフラグ
                 #self.offsetyaw_bad_gps = -10/180*math.pi

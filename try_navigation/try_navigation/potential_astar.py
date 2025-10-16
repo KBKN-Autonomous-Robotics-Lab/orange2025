@@ -58,10 +58,16 @@ class PotentialAStar(Node):
             depth = 1
         )
         
+        # set parameter (launch can change this parameter)
+        self.declare_parameter('odom', '/fusion/odom')
+        
+        # define parameter
+        odom_topic = self.get_parameter('odom').get_parameter_value().string_value
+        
         # Subscriptionを作成。CustomMsg型,'/livox/lidar'という名前のtopicをsubscribe。
         self.subscription = self.create_subscription(sensor_msgs.PointCloud2, '/pcd_segment_obs', self.potential_astar, qos_profile)
         #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom/wheel_imu', self.get_odom, qos_profile_sub)
-        self.subscription = self.create_subscription(nav_msgs.Odometry,'/fusion/odom', self.get_odom, qos_profile_sub) # /odom/wheel_spimu
+        self.subscription = self.create_subscription(nav_msgs.Odometry, odom_topic, self.get_odom, qos_profile_sub) # /odom/wheel_spimu
         #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom_fast', self.get_odom, qos_profile_sub)
         #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom_ekf_match', self.get_odom, qos_profile_sub)
         self.subscription = self.create_subscription(geometry_msgs.PoseArray,'/current_waypoint', self.get_waypoint, qos_profile_sub)
@@ -108,7 +114,7 @@ class PotentialAStar(Node):
         self.cg2nd=20 #ポテンシャルの引力パラメータ
         self.lg2nd=20 #ポテンシャルの引力パラメータ
         self.co2nd=11 #ポテンシャルの斥力パラメータ SICKパラ目：co=11;lo=0.55;
-        self.lo2nd=0.21#55 #0.5#0.9#ポテンシャルの斥力パラメータ  24/11/29 ok IGVC20250601 0.25 -> 0.22
+        self.lo2nd=0.22#55 #0.5#0.9#ポテンシャルの斥力パラメータ  24/11/29 ok IGVC20250601 0.25 -> 0.22
         #self.lo2nd=0.30#55 #0.5#0.9#ポテンシャルの斥力パラメータ
         
         
@@ -177,7 +183,7 @@ class PotentialAStar(Node):
         ]
         
         tukuba_obs_x =np.linspace(-45,25,860);
-        tukuba_obs_y =np.linspace(97,92,860);
+        tukuba_obs_y =np.linspace(97,94,860);
         tukuba_obs_z =np.linspace(0,0,860);
         self.tsukuba_obs = np.array([tukuba_obs_x, tukuba_obs_y, tukuba_obs_z]);
         
