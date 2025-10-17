@@ -61,7 +61,7 @@ class PathFollower(Node):
         
         # Publisherを作成
         self.cmd_vel_publisher = self.create_publisher(geometry_msgs.Twist, 'cmd_vel', qos_profile) #set publish pcd topic name
-        self.marker_pub = self.create_publisher(MarkerArray, 'wall_follow_markers', 10)
+        #self.marker_pub = self.create_publisher(MarkerArray, 'wall_follow_markers', 10)
 
         #パラメータ init
         self.path_plan = np.array([[0],[0],[0]])
