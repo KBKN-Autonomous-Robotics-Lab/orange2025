@@ -134,7 +134,7 @@ class PathFollower(Node):
             #[-69.5,	-62,	-47.5,	-27.5, 1.0], #tyokusen4 ||| [-67.5,	-62,	-47.5,	-27.5, 1.0]before:[-67.0,	-62,	-47.5,	-27.5, 1.0], 
             #[-55,	-35,	41,	46,    1.0], #Goal
             
-            [63.0, 65.0, 19.0, 39.0, 1.0], #shiyakusyo
+            [63.5, 65.0, 19.0, 39.0, 1.0], #shiyakusyo
             [ 999,  999, 999, 999, 0.0] ]) #
         self.stop_num = 0;
         
@@ -170,12 +170,12 @@ class PathFollower(Node):
         #################################################################################
         
         ################# IGVC SelfDrive Full #20250601# #################
-        self.sd_full_flag = 1 #root flag
+        self.sd_full_flag = 0 #root flag
         self.waypoint_number = 0
-        self.sd_full_human_stop = 1  #sub flag
+        self.sd_full_human_stop = 0  #sub flag
         if self.sd_full_human_stop == 1:
             self.sd_c_obs_stop_dist = self.sd_human_stop_dist
-        self.sd_full_sign_stop = 1 #sub flag
+        self.sd_full_sign_stop = 0 #sub flag
         if self.sd_full_sign_stop == 1:
             dist = 0.5 + 0.4 + 0.5# eria +top +delay
             sd_full_stop_xy = [-32.37441428909107, -16.465277566213718, 0.0]
@@ -375,7 +375,7 @@ class PathFollower(Node):
         if ~np.any(ch_obs) :
             if np.any(rh_obs) and np.any(lh_obs):
                 target_theta = (target_rad) * (180 / math.pi)
-                print("--- Center --- Befor target_theta[deg]:",target_theta)
+                #print("--- Center --- Befor target_theta[deg]:",target_theta)
                 speed = 0.25
                 lh_obs_close = min(lh_obs[1,:]) # y0 lh min
                 rh_obs_close = max(rh_obs[1,:]) # y0 rh min
@@ -384,20 +384,20 @@ class PathFollower(Node):
                 #c_point = (cx, cy)
                 target_rad = math.atan2(cx, cf)
                 target_theta = (target_rad) * (180 / math.pi)
-                print("--- Center --- After target_theta[deg]:",target_theta)
+                #print("--- Center --- After target_theta[deg]:",target_theta)
                             
             elif np.any(rh_obs) and ~np.any(lh_obs):
                 speed = 0.25
                 if 0 <= self.waypoint_number and self.waypoint_number <= 9:
                     target_theta = (target_rad) * (180 / math.pi)
-                    print("!!!RH!!!! Befor target_theta[deg]:",target_theta)
+                    #print("!!!RH!!!! Befor target_theta[deg]:",target_theta)
                     rh_obs_close = max(rh_obs[1,:]) # y0 rh min
                     rh_dist = 0.65
                     cy = cf
                     cx = rh_obs_close + rh_dist
                     target_rad = math.atan2(cx, cf)
                     target_theta = (target_rad) * (180 / math.pi)
-                    print("!!!RH!!!! After target_theta[deg]:",target_theta)
+                    #print("!!!RH!!!! After target_theta[deg]:",target_theta)
                     
             
             elif ~np.any(rh_obs) and np.any(lh_obs):
@@ -618,7 +618,6 @@ class PathFollower(Node):
         self.ref_theta_y = 0 #pitch /math.pi*180
         self.ref_theta_z = yaw /math.pi*180
         
-        
         if ((self.stop_xy[self.stop_num,0] < self.ref_position_x) and (self.ref_position_x < self.stop_xy[self.stop_num,1]) and (self.stop_xy[self.stop_num,2] < self.ref_position_y) and (self.ref_position_y < self.stop_xy[self.stop_num,3]) ) or ((self.stop_xy[self.stop_num,0] < self.position_x) and (self.position_x < self.stop_xy[self.stop_num,1]) and (self.stop_xy[self.stop_num,2] < self.position_y) and (self.position_y < self.stop_xy[self.stop_num,3]) ):
             if self.stop_xy[self.stop_num,4] > 0:
                 self.get_logger().info('####### stop flag on %f #######' % (self.stop_num))
@@ -626,7 +625,6 @@ class PathFollower(Node):
             else:
                 self.get_logger().info('####### through flag on %f #######' % (self.stop_num))
             self.stop_num = self.stop_num + 1;
-            
         
     def pointcloud2_to_array(self, cloud_msg):
         # Extract point cloud data

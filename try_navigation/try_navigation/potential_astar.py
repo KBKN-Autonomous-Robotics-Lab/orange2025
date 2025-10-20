@@ -143,6 +143,11 @@ class PotentialAStar(Node):
         self.left_obs_points = np.array([[],[],[]])
         self.dot_obs_points = np.array([[],[],[]])
         
+        # behind robot obs
+        self.self_radius = 0.8
+        self.angle_min = -60 + 180
+        self.angle_max = 60 + 180
+        
         #DRIVE MODE
         self.functions_test = 0 #autonav:1 selfdrive:0
         
@@ -425,9 +430,9 @@ class PotentialAStar(Node):
             elif self.obs_info[self.waypoint_number][self.dotline_info] == 1:
                 dot_line_local = localization_xyz(self.dot_obs_points, position_x, position_y, theta_x, theta_y, theta_z)
         
-        self_radius = 0.8
-        angle_min = -60 + 180
-        angle_max = 60 + 180
+        self_radius = self.self_radius
+        angle_min = self.angle_min
+        angle_max = self.angle_max
         angles = np.linspace(np.radians(angle_min),np.radians(angle_max),100)
         x_radius = self_radius * np.cos(angles)
         y_radius = self_radius * np.sin(angles)

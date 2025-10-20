@@ -110,7 +110,7 @@ class GPSData(Node):
 
         if count > 0:
             #self.initial_coordinate = [lat_sum / count, lon_sum / count] # calculate average
-            self.initial_coordinate = [36.04974095972727, 140.04593633886364 ] # tsukuba start point 36.0497502, 140.0459234 36.04972947264545, 140.04590687627274 36.04974095972727, 140.04593633886364 , left 36.04976195993636, 140.04593755179093/nakaniwa 35.4257898377487,139.313807281254 /35.425952230280004, 139.31380123427
+            self.initial_coordinate = [36.04974095972727, 140.04593633886364 ] # tsukuba start point right 36.04974095972727, 140.04593633886364 , left 36.04976195993636, 140.04593755179093/nakaniwa 35.4257898377487,139.313807281254 /35.425952230280004, 139.31380123427
             self.current_coordinate = [lat_sum / count, lon_sum / count] # for tsukuba
             self.theta = (heading_sum / count) - 90
             self.initialized = True
