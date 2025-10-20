@@ -32,7 +32,7 @@ def generate_launch_description():
     waypoint_path = LaunchConfiguration('waypoint_path')
     declare_waypoint_arg = DeclareLaunchArgument(
         'waypoint_path',
-        default_value='kbkn_maps/waypoints/hosei/2025/nakaniwa_tsukuba.yaml',
+        default_value='kbkn_maps/waypoints/tsukuba/2025/papa/tsukuba_waypoint.yaml',
         description='waypoint name'
     )
     
@@ -113,13 +113,13 @@ def generate_launch_description():
             arguments=[],
         ),
         #robot ctrl
-        Node(package='try_navigation',
-            executable='path_follower',
-            name='path_follower_node',
-            output='screen',
-            parameters=[{'odom': odom}],
-            arguments=[],
-        ),
+        #Node(package='try_navigation',
+        #    executable='path_follower',
+        #    name='path_follower_node',
+        #    output='screen',
+        #    parameters=[{'odom': odom}],
+        #    arguments=[],
+        #),
         
         #navigation start
         Node(package='navigation_control',

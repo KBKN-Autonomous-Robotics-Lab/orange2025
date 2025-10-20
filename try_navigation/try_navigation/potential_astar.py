@@ -425,6 +425,15 @@ class PotentialAStar(Node):
             elif self.obs_info[self.waypoint_number][self.dotline_info] == 1:
                 dot_line_local = localization_xyz(self.dot_obs_points, position_x, position_y, theta_x, theta_y, theta_z)
         
+        self_radius = 0.8
+        angle_min = -60 + 180
+        angle_max = 60 + 180
+        angles = np.linspace(np.radians(angle_min),np.radians(angle_max),100)
+        x_radius = self_radius * np.cos(angles)
+        y_radius = self_radius * np.sin(angles)
+        z_radius = 0 * np.cos(angles)
+        self_radius_points = np.vstack((x_radius, y_radius, z_radius))
+        
         """
         #map_obs add
         if len(self.map_obs_points[0,:])>0:
@@ -476,6 +485,7 @@ class PotentialAStar(Node):
             obs_points = np.insert(obs_points, len(obs_points[0,:]), dot_line_local.T, axis=1)
         
         obs_points = np.insert(obs_points, len(obs_points[0,:]), relative_point_rot.T, axis=1)
+        obs_points = np.insert(obs_points, len(obs_points[0,:]), self_radius_points.T, axis=1)
         #obs_points = np.insert(obs_points, len(obs_points[0,:]), self.tsukuba_obs.T, axis=1)
         points_round = np.round(obs_points * self.obs_pixel) / self.obs_pixel
         obs_xy_local = points_round[:,~pd.DataFrame({"x":points_round[0,:], "y":points_round[1,:]}).duplicated()]
