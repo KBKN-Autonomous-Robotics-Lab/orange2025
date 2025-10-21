@@ -143,11 +143,6 @@ class PotentialAStar(Node):
         self.left_obs_points = np.array([[],[],[]])
         self.dot_obs_points = np.array([[],[],[]])
         
-        # behind robot obs
-        self.self_radius = 0.8
-        self.angle_min = -60 + 180
-        self.angle_max = 60 + 180
-        
         #DRIVE MODE
         self.functions_test = 0 #autonav:1 selfdrive:0
         
@@ -187,11 +182,12 @@ class PotentialAStar(Node):
             [   0,      0,    0,       0,        1,        0,       0,      0]  # waypoint 21 GOAL!!!!!!
         ]
         
-        tukuba_obs_x =np.linspace(-45,25,860);
-        tukuba_obs_y =np.linspace(97,94,860);
-        tukuba_obs_z =np.linspace(0,0,860);
-        self.tsukuba_obs = np.array([tukuba_obs_x, tukuba_obs_y, tukuba_obs_z]);
-        
+        #tukuba_obs_x =np.linspace(-45,25,860);
+        #tukuba_obs_y =np.linspace(97,94,860);
+        #tukuba_obs_z =np.linspace(0,0,860);
+        #self.tsukuba_obs = np.array([tukuba_obs_x, tukuba_obs_y, tukuba_obs_z]);
+        self.tsukuba_obs = np.array([[],[],[]])
+               
         
         ################# IGVC SelfDrive Quolification line stop test #20250530# #################
         self.sd_line_stop_test = 0
@@ -362,7 +358,7 @@ class PotentialAStar(Node):
         #print(f"points ={points.shape}")
         
         self.dot_obs_points = np.vstack((points[0,:], points[1,:], points[2,:]))
-        
+            
     def potential_astar(self, msg):
         
         #print stamp message
@@ -430,9 +426,9 @@ class PotentialAStar(Node):
             elif self.obs_info[self.waypoint_number][self.dotline_info] == 1:
                 dot_line_local = localization_xyz(self.dot_obs_points, position_x, position_y, theta_x, theta_y, theta_z)
         
-        self_radius = self.self_radius
-        angle_min = self.angle_min
-        angle_max = self.angle_max
+        self_radius = 0.8
+        angle_min = -60 + 180
+        angle_max = 60 + 180
         angles = np.linspace(np.radians(angle_min),np.radians(angle_max),100)
         x_radius = self_radius * np.cos(angles)
         y_radius = self_radius * np.sin(angles)
@@ -449,6 +445,14 @@ class PotentialAStar(Node):
         else:
             relative_point_rot = np.array([[],[],[]])
         """    
+        
+        # make map_obs   x1  x2  y1  y2
+        obs1 = make_obs(-45, 25, 97, 94) # siyakusyoura minami
+        obs2 = make_obs(  5, 21, 100, 101) # siyakusyoura kita
+        obs3 = make_obs(-73,-75, 105, 29) # siyakusyo nisi
+
+        self.tsukuba_obs = np.hstack((obs1, obs2, obs3))
+        
         #map_obs add
         if len(self.tsukuba_obs[0,:])>0:
             relative_point_x = self.tsukuba_obs[0,:] - self.position_x
@@ -748,6 +752,11 @@ def path_msg(waypoints, stamp, parent_frame):
         wp_msg.poses.append(waypoint)
     return wp_msg
 
+def make_obs(x1, x2, y1, y2, n=860, z=0):
+    x = np.linspace(x1, x2, n)
+    y = np.linspace(y1, y2, n)
+    z = np.full(n, z)
+    return np.array([x, y, z])
 
 # mainという名前の関数です。C++のmain関数とは異なり、これは処理の開始地点ではありません。
 def main(args=None):
