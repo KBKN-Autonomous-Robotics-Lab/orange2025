@@ -67,7 +67,7 @@ class ExtendedKalmanFilter(Node):
         
 
         self.sub_a = self.create_subscription(
-            Odometry, '/odom/wheel_spimu', self.sensor_a_callback, 10) # /odom/wheel_spimu
+            Odometry, '/odom/combine', self.sensor_a_callback, 10) # /odom/wheel_spimu /odom/combine
         self.sub_b = self.create_subscription(
             Odometry, '/odom/UM982', self.sensor_b_callback, 10)
         #self.sub_b = self.create_subscription(
@@ -87,6 +87,8 @@ class ExtendedKalmanFilter(Node):
 
         self.get_logger().info("Start ekf_myself node")
         self.get_logger().info("-------------------------")
+        
+        self.is_initialized = False
         
     def reset_tf_buffer(self): 
         # キャッシュのクリアとして、Bufferのインスタンスを再作成 
@@ -131,6 +133,15 @@ class ExtendedKalmanFilter(Node):
 
         self.GTheta = self.orientation_to_yaw(
             data.pose.pose.orientation.z, data.pose.pose.orientation.w)
+            
+        # initialize odom
+        if not self.is_initialized and self.SmpTime is not None and self.SmpTime > 0: 
+            self.initialize_odomA(
+                data.pose.pose.position.x, 
+                data.pose.pose.position.y, 
+                self.GTheta, 
+                self.SmpTime
+            )
 
     def sensor_b_callback(self, data):
         self.GpsXY = np.array(
@@ -261,6 +272,20 @@ class ExtendedKalmanFilter(Node):
             [[(1.379e-3)**2, 0], [0, (0.03 * np.pi / 180 * SmpTime)**2]])
         G0 = np.array([[1, 0], [0, 0], [0, 0], [0, 1]])
         self.P = G0 @ self.Q @ G0.T
+    
+    # 20251021 tuika
+    def initialize_odomA(self, x, y, GTheta, SmpTime):
+        self.GTheta0 = GTheta
+        # odomAの座標 (x, y) でXXを初期化
+        self.XX = np.array([x, y, np.cos(GTheta), np.sin(GTheta)]) 
+        self.w = np.array([(1.379e-3)**2, (0.03 * np.pi / 180 * SmpTime)**2])
+        self.H = np.array([[1, 0, 0, 0], [0, 1, 0, 0]])
+        self.Q = np.array(
+            [[(1.379e-3)**2, 0], [0, (0.03 * np.pi / 180 * SmpTime)**2]])
+        G0 = np.array([[1, 0], [0, 0], [0, 0], [0, 1]])
+        self.P = G0 @ self.Q @ G0.T
+        self.is_initialized = True # 初期化フラグを立てる
+        self.get_logger().info(f"EKF initialized with OdomA at: ({x}, {y})") # ログ出力
 
     def initializeGPS(self, GpsXY, GTheta, SmpTime):
         self.GTheta0 = GTheta
@@ -274,8 +299,11 @@ class ExtendedKalmanFilter(Node):
         self.P = G0 @ self.Q @ G0.T
 
     def KalfXY(self, Speed, SmpTime, GTheta, R1, R2):
-        if self.H is None:
-            self.initialize(GTheta, SmpTime)
+        #if self.H is None:
+        #    self.initialize(GTheta, SmpTime)
+            
+        if not self.is_initialized:
+            return np.array([0, 0])
 
         self.R = np.array([[R1, 0], [0, R2]])
 
@@ -303,6 +331,12 @@ class ExtendedKalmanFilter(Node):
         return self.XX[:2]
 
     def KalfGPSXY(self, Speed, SmpTime, GTheta, GpsXY, R1, R2):
+        #if self.H is None:
+        #    self.initializeGPS(GpsXY, GTheta, SmpTime)
+        
+        if not self.is_initialized:
+            return np.array([0, 0])
+        
         if self.H is None:
             self.initializeGPS(GpsXY, GTheta, SmpTime)
 

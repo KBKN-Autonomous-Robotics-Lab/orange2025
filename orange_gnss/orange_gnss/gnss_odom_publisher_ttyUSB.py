@@ -20,15 +20,20 @@ class GPSData(Node):
         self.declare_parameter('country_id', 0)
         self.declare_parameter('Position_magnification', 1.675)
         self.declare_parameter('heading', 90.0)
+        self.declare_parameter('start_lat', 35.425952230280004) # tsukuba start point right 36.04974095972727, 140.04593633886364 , left 36.04976195993636, 140.04593755179093/nakaniwa 35.4257898377487,139.313807281254 /35.425952230280004, 139.31380123427
+        self.declare_parameter('start_lon', 139.31380123427)
 
         self.dev_name = self.get_parameter('port').get_parameter_value().string_value
         self.serial_baud = self.get_parameter('baud').get_parameter_value().integer_value
         self.country_id = self.get_parameter('country_id').get_parameter_value().integer_value
         self.Position_magnification = self.get_parameter('Position_magnification').get_parameter_value().double_value
         #self.theta = self.get_parameter('heading').get_parameter_value().double_value
-        self.tsukuba_theta=93.0 # nakaniwa 180 tsukuba 93
+        self.tsukuba_theta= self.get_parameter('heading').get_parameter_value().double_value # nakaniwa 180 tsukuba 93
 
         self.initial_coordinate = None
+        self.start_lat = self.get_parameter('start_lat').get_parameter_value().double_value
+        self.start_lon = self.get_parameter('start_lon').get_parameter_value().double_value
+        self.start_GPS_coordinate = [self.start_lat, self.start_lon]
         self.fix_data = None
         self.count = 0
         
@@ -110,7 +115,7 @@ class GPSData(Node):
 
         if count > 0:
             #self.initial_coordinate = [lat_sum / count, lon_sum / count] # calculate average
-            self.initial_coordinate = [36.04974095972727, 140.04593633886364 ] # tsukuba start point right 36.04974095972727, 140.04593633886364 , left 36.04976195993636, 140.04593755179093/nakaniwa 35.4257898377487,139.313807281254 /35.425952230280004, 139.31380123427
+            self.initial_coordinate = self.start_GPS_coordinate
             self.current_coordinate = [lat_sum / count, lon_sum / count] # for tsukuba
             self.theta = (heading_sum / count) - 90
             self.initialized = True

@@ -40,15 +40,15 @@ class PcdRotation(Node):
         
         #パラメータ
         #set LiDAR position
-        self.MID360_HIGHT = 980/1000; #hight position[m]
+        self.MID360_HIGHT = 950.8/1000; #hight position[m] 0.9508604675798957
             
         #上下反転  LiDAR init
         self.THETA_INIT_X = 180 #[deg]
-        self.THETA_INIT_Y = 0 #[deg]
+        self.THETA_INIT_Y = 2.663 #[deg] 2.663001576990896
         self.THETA_INIT_Z = 0 #[deg]
         
         #initialize calibration
-        self.initialize_calibration = 0
+        self.initialize_calibration = 1
         self.pcd_buff = np.array([[],[],[],[]]);
         self.x1_init_point = 1.5
         self.x2_init_point = 2.5
@@ -102,7 +102,7 @@ class PcdRotation(Node):
                 x2_max = self.x2_init_point + self.x_range;
                 y_min = self.y_init_point  - self.y_range;
                 y_max = self.y_init_point  + self.y_range;
-                #print(f"x1_min,x1_max,x2_min,x2_max,y_min,y_max ={ x1_min, x1_max, x2_min, x2_max, y_min, y_max}")
+                print(f"x1_min,x1_max,x2_min,x2_max,y_min,y_max ={ x1_min, x1_max, x2_min, x2_max, y_min, y_max}")
                 pcd_x1_ind = self.pcd_serch(self.pcd_buff, x1_min, x1_max, y_min, y_max)
                 pcd_x2_ind = self.pcd_serch(self.pcd_buff, x2_min, x2_max, y_min, y_max)
                 #print(f"len(self.pcd_buff[0,pcd_x1_ind]), {len(self.pcd_buff[0,pcd_x1_ind])}")
@@ -135,6 +135,7 @@ class PcdRotation(Node):
                     self.THETA_INIT_Y = self.THETA_INIT_Y + theta #[deg]
                     self.initialize_calibration = 1
                     print(f"self.MID360_HIGHT ={self.MID360_HIGHT}")
+                    print(f"self.THETA_INIT_Y ={self.THETA_INIT_Y}")
                     
         
         #add mid height position

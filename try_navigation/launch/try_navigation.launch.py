@@ -36,10 +36,15 @@ def generate_launch_description():
         description='waypoint name'
     )
     
-    
+    waypoint_start_index = LaunchConfiguration('waypoint_start_index')
+    declare_waypoint_start_arg = DeclareLaunchArgument(
+        'waypoint_start_index',
+        default_value= '0',
+        description='waypoint start index'
+    )
     
     return LaunchDescription([
-        declare_odom_arg, declare_waypoint_arg,
+        declare_odom_arg, declare_waypoint_arg, declare_waypoint_start_arg,
         
         #rviz2
         Node(package='rviz2',
@@ -59,6 +64,14 @@ def generate_launch_description():
             name='pcd_rotation_node',
             output='screen',
             arguments=[]
+        ),
+        
+        #odom combination
+        Node(package='orange_gnss',
+            executable='odom_combination',
+            name='odom_combination',
+            output='screen',
+            arguments=[],
         ),
    
         #gps ekf edit
@@ -91,7 +104,8 @@ def generate_launch_description():
             name='gps_waypoint',
             output='screen',
             parameters=[{'odom': odom},
-                        {'waypoint_path': waypoint_path}],
+                        {'waypoint_path': waypoint_path},
+                        {'waypoint_start_index': waypoint_start_index}],
             arguments=[],
         ),
         # $ ros2 run navigation_control gps_waypoint
