@@ -262,7 +262,8 @@ class ExtendedKalmanFilter(Node):
         data = (self.k_p * self.e_n + self.k_d*(self.e_n - self.e_n1))
         self.e_n1 = self.e_n
         return data
-
+    
+    '''
     def initialize(self, GTheta, SmpTime):
         self.GTheta0 = GTheta
         self.XX = np.array([0, 0, np.cos(GTheta), np.sin(GTheta)])
@@ -272,6 +273,7 @@ class ExtendedKalmanFilter(Node):
             [[(1.379e-3)**2, 0], [0, (0.03 * np.pi / 180 * SmpTime)**2]])
         G0 = np.array([[1, 0], [0, 0], [0, 0], [0, 1]])
         self.P = G0 @ self.Q @ G0.T
+    '''
     
     # 20251021 tuika
     def initialize_odomA(self, x, y, GTheta, SmpTime):

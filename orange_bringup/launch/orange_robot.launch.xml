@@ -119,7 +119,7 @@
     <param name="baud" value="115200"/>
     <param name="country_id" value="0"/>
     <param name="Position_magnification" value="1.675"/>
-    <param name="heading" value="93.0"/>
+    <param name="heading" value="180.0"/>
     <param name="start_lat" value="35.425952230280004"/>
     <param name="start_lon" value="139.31380123427"/>
     <param name="time_out" value="1.0"/>

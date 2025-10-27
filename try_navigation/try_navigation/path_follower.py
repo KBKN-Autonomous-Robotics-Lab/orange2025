@@ -53,6 +53,7 @@ class PathFollower(Node):
         self.goal_sub = self.create_subscription(PoseStamped, '/goal_pose', self.goal_pose_callback, qos_profile)
         self.stop_sub = self.create_subscription(String, '/stop_sign_status', self.stop_sign_callback, 10)
         self.human_sub = self.create_subscription(String, '/human_status', self.human_callback, 10)
+        self.waypoint_number_sub = self.create_subscription(Int32,'/waypoint_number', self.get_waypoint_number, qos_profile_sub)
         self.subscription  # 警告を回避するために設置されているだけです。削除しても挙動はかわりません。
         
         # タイマーを0.05秒（50ミリ秒）ごとに呼び出す
@@ -386,11 +387,13 @@ class PathFollower(Node):
         #c_obs_near = ( -50<obs_theta) * (obs_theta<  50) * (obs_dist<0.5)
         #c_obs_back = ( -50<obs_theta) * (obs_theta<  50) * (obs_dist<0.4)
         cf = 1.15
+        
+        #self.get_logger().info(f"self.waypoint_number: {self.waypoint_number}")
                 
         if ~np.any(ch_obs) :
             if np.any(rh_obs) and np.any(lh_obs):
                 target_theta = (target_rad) * (180 / math.pi)
-                #print("--- Center --- Befor target_theta[deg]:",target_theta)
+                print("--- Center --- Befor target_theta[deg]:",target_theta)
                 speed = 0.25
                 lh_obs_close = min(lh_obs[1,:]) # y0 lh min
                 rh_obs_close = max(rh_obs[1,:]) # y0 rh min
@@ -399,24 +402,34 @@ class PathFollower(Node):
                 #c_point = (cx, cy)
                 target_rad = math.atan2(cx, cf)
                 target_theta = (target_rad) * (180 / math.pi)
-                #print("--- Center --- After target_theta[deg]:",target_theta)
+                print("--- Center --- After target_theta[deg]:",target_theta)
                             
             elif np.any(rh_obs) and ~np.any(lh_obs):
                 speed = 0.25
-                if 0 <= self.waypoint_number and self.waypoint_number <= 9:
+                if (6 <= self.waypoint_number <= 8) or (self.waypoint_number==15) or (self.waypoint_number==18):
                     target_theta = (target_rad) * (180 / math.pi)
-                    #print("!!!RH!!!! Befor target_theta[deg]:",target_theta)
+                    print("!!!RH!!!! Befor target_theta[deg]:",target_theta)
                     rh_obs_close = max(rh_obs[1,:]) # y0 rh min
                     rh_dist = 0.65
                     cy = cf
                     cx = rh_obs_close + rh_dist
                     target_rad = math.atan2(cx, cf)
                     target_theta = (target_rad) * (180 / math.pi)
-                    #print("!!!RH!!!! After target_theta[deg]:",target_theta)
+                    print("!!!RH!!!! After target_theta[deg]:",target_theta)
                     
             
             elif ~np.any(rh_obs) and np.any(lh_obs):
                 speed = 0.25
+                if 11 <= self.waypoint_number <= 12:
+                    target_theta = (target_rad) * (180 / math.pi)
+                    print("!!!LH!!!! Befor target_theta[deg]:",target_theta)
+                    lh_obs_close = min(lh_obs[1,:]) # y0 lh min
+                    lh_dist = 0.65
+                    cy = cf
+                    cx = lh_obs_close + lh_dist
+                    target_rad = math.atan2(cx, cf)
+                    target_theta = (target_rad) * (180 / math.pi)
+                    print("!!!LH!!!! After target_theta[deg]:",target_theta)
             
             #elif ~np.any(rh_obs) and ~np.any(lh_obs):
             #    speed = 0.25

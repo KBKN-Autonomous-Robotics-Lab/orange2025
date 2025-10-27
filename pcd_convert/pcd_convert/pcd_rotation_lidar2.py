@@ -43,15 +43,15 @@ class PcdRotation(Node):
         
         #パラメータ
         #set LiDAR position
-        self.MID360_HIGHT = 980/1000; #hight position[m]
+        self.MID360_HIGHT = 750/1000; #self.MID360_HIGHT =1.7483812830163088
             
         #上下反転  LiDAR init
-        self.THETA_INIT_X = -180 #[deg]
-        self.THETA_INIT_Y = 0 #[deg]
-        self.THETA_INIT_Z = 0 #[deg]
+        self.THETA_INIT_X = 0 #[deg]-180
+        self.THETA_INIT_Y = 0.05435636478316808 #self.THETA_INIT_Y =0.05435636478316808#[deg]
+        self.THETA_INIT_Z = 0 #[deg]  
         
         #initialize calibration
-        self.initialize_calibration = 0
+        self.initialize_calibration = 1
         self.pcd_buff = np.array([[],[],[],[]]);
         self.x1_init_point = 1.5
         self.x2_init_point = 2.5
@@ -137,7 +137,8 @@ class PcdRotation(Node):
                     self.MID360_HIGHT = - intercept; #hight position[m]
                     self.THETA_INIT_Y = self.THETA_INIT_Y + theta #[deg]
                     self.initialize_calibration = 1
-                    print(f"self.MID360_HIGHT ={self.MID360_HIGHT}")
+                    #print(f"self.MID360_HIGHT ={self.MID360_HIGHT}")
+                    #print(f"self.THETA_INIT_Y ={self.THETA_INIT_Y}")
                     
         
         #add mid height position

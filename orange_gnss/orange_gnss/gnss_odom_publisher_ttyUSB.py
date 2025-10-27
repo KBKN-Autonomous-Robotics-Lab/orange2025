@@ -48,8 +48,8 @@ class GPSData(Node):
         
         # service client
         self.client = self.create_client(Avglatlon, 'send_avg_gps')
-        while not self.client.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info("service not available...")
+        #while not self.client.wait_for_service(timeout_sec=1.0):
+        #    self.get_logger().info("service not available...")
 
         self.get_logger().info("Start get_lonlat quat node")
         self.get_logger().info("-------------------------")
@@ -246,8 +246,8 @@ class GPSData(Node):
         if robotheading >= 360:
             robotheading -= 360
 
-        self.get_logger().info(f"real_heading: {real_heading}")
-        self.get_logger().info(f"robotheading: {robotheading}")
+        #self.get_logger().info(f"real_heading: {real_heading}")
+        #self.get_logger().info(f"robotheading: {robotheading}")
 
         if self.count == 0:
             self.get_logger().info(f"!!!----------robotheading: {robotheading} deg----------!!!")
