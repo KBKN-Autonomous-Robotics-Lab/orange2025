@@ -646,10 +646,30 @@ class PathFollower(Node):
         self.ref_theta_y = 0 #pitch /math.pi*180
         self.ref_theta_z = yaw /math.pi*180
         
+        if self.waypoint_number >= 79:
+            if self.stop_num <= 14:
+                self.stop_num = 15
+        elif self.waypoint_number >= 71:
+            if self.stop_num <= 12:
+                self.stop_num = 13
+        elif self.waypoint_number >= 62:
+            if self.stop_num <= 8:
+                self.stop_num = 9
+        elif self.waypoint_number >= 51:
+            if self.stop_num <= 7:
+                self.stop_num = 8
+        elif self.waypoint_number >= 33:
+            if self.stop_num <= 6:
+                self.stop_num = 7
+        elif self.waypoint_number >= 25:
+            if self.stop_num <= 2:
+                self.stop_num = 3
+        
         if ((self.stop_xy[self.stop_num,0] < self.ref_position_x) and (self.ref_position_x < self.stop_xy[self.stop_num,1]) and (self.stop_xy[self.stop_num,2] < self.ref_position_y) and (self.ref_position_y < self.stop_xy[self.stop_num,3]) ) or ((self.stop_xy[self.stop_num,0] < self.position_x) and (self.position_x < self.stop_xy[self.stop_num,1]) and (self.stop_xy[self.stop_num,2] < self.position_y) and (self.position_y < self.stop_xy[self.stop_num,3]) ):
             if self.stop_xy[self.stop_num,4] > 0:
                 self.get_logger().info('####### stop flag on %f #######' % (self.stop_num))
                 self.stop_flag = 1;
+                #print(self.stop_num)
             else:
                 self.get_logger().info('####### through flag on %f #######' % (self.stop_num))
             self.stop_num = self.stop_num + 1;
