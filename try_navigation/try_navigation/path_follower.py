@@ -160,6 +160,9 @@ class PathFollower(Node):
         self.lh_obs = 0
         self.ch_obs = 0
         self.t_stamp = 0
+
+        # angle megin for gps heading 
+        self.angle_diff = 30
         
         
         ################# IGVC SelfDrive Quolification line stop test #20250530# #################
@@ -389,9 +392,9 @@ class PathFollower(Node):
         cf = 1.15
         
         #self.get_logger().info(f"self.waypoint_number: {self.waypoint_number}")
-                
+        print(theta_z)
         if ~np.any(ch_obs) :
-            if np.any(rh_obs) and np.any(lh_obs):
+            if np.any(lh_obs) and np.any(rh_obs) :  #真ん中　
                 target_theta = (target_rad) * (180 / math.pi)
                 print("--- Center --- Befor target_theta[deg]:",target_theta)
                 speed = 0.25
@@ -404,9 +407,12 @@ class PathFollower(Node):
                 target_theta = (target_rad) * (180 / math.pi)
                 print("--- Center --- After target_theta[deg]:",target_theta)
                             
-            elif np.any(rh_obs) and ~np.any(lh_obs):
+            #or ((0 <= self.waypoint_number <= 3) and (0 - self.angle_diff <= theta_z <= 0 + self.angle_diff)) \
+            elif ~np.any(lh_obs) and np.any(rh_obs):   #右寄り　
                 speed = 0.25
-                if (6 <= self.waypoint_number <= 8) or (self.waypoint_number==15) or (self.waypoint_number==18):
+                if (6 <= self.waypoint_number <= 8) or (self.waypoint_number==15) or (self.waypoint_number==18) \
+                or ((50 <= self.waypoint_number <= 54) and (0 - self.angle_diff <= theta_z <= 0 + self.angle_diff)) \
+                or ((70 <= self.waypoint_number <= 73) and (-150 <= theta_z <= -150 - self.angle_diff) and (150  <= theta_z <= 150 + self.angle_diff)) :
                     target_theta = (target_rad) * (180 / math.pi)
                     print("!!!RH!!!! Befor target_theta[deg]:",target_theta)
                     rh_obs_close = max(rh_obs[1,:]) # y0 rh min
@@ -417,10 +423,11 @@ class PathFollower(Node):
                     target_theta = (target_rad) * (180 / math.pi)
                     print("!!!RH!!!! After target_theta[deg]:",target_theta)
                     
-            
-            elif ~np.any(rh_obs) and np.any(lh_obs):
+            elif np.any(lh_obs) and ~np.any(rh_obs):  #左寄り
                 speed = 0.25
-                if 11 <= self.waypoint_number <= 12:
+                if 11 <= self.waypoint_number <= 12 \
+                or ((25 <= self.waypoint_number <= 28) and (-90 - self.angle_diff <= theta_z <= -90 + self.angle_diff)) \
+                or ((56 <= self.waypoint_number <= 60) and (-150 <= theta_z <= -150 - self.angle_diff) and (150  <= theta_z <= 150 + self.angle_diff)) :
                     target_theta = (target_rad) * (180 / math.pi)
                     print("!!!LH!!!! Befor target_theta[deg]:",target_theta)
                     lh_obs_close = min(lh_obs[1,:]) # y0 lh min
@@ -445,10 +452,11 @@ class PathFollower(Node):
         if target_theta  < -lim_steer:
             speed = 0.10
             target_rad = -lim_steer/180*math.pi
+            #print("over write1")
         elif lim_steer < target_theta:
             speed = 0.10
             target_rad = lim_steer/180*math.pi
-        
+            #print("over write1")
         if abs(target_theta)  > 90:
             speed = -0.10
         if np.any(c_obs_back) :
@@ -701,12 +709,12 @@ class PathFollower(Node):
         #map_obs
         self.obs_points = points
         
-        rh_obs = self.pcd_serch(points, 1.0,1.3,-0.7,0)
+        rh_obs = self.pcd_serch(points, 1.0,1.3,-1.0,0)#1.0,1.3,-0.7,0
         if len(rh_obs[0,:]) > 10:
             self.rh_obs = 1
         else:
             self.rh_obs = 0
-        lh_obs = self.pcd_serch(points, 1.0,1.3,0,0.7)
+        lh_obs = self.pcd_serch(points, 1.0,1.3,0,1.0)#1.0,1.3,0,0.7
         if len(lh_obs[0,:]) > 10:
             self.lh_obs = 1
         else:
