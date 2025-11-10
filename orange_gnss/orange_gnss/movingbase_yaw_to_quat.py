@@ -12,7 +12,7 @@ class MovingBaseNode(Node):
         super().__init__('movingbase')
         self.HEADER = 6
         self.count = 0
-        self.first_heading = 0
+        self.first_heading = 180.0
 
         self.declare_parameter('port', '/dev/sensors/GNSSrover')
         self.declare_parameter('baud', 9600)
@@ -134,7 +134,7 @@ class MovingBaseNode(Node):
         nowpoint = self.readrelposned()
         if nowpoint is not None:
 
-            heading = nowpoint[3] + 90
+            heading = nowpoint[3] - 90
             if heading >= 360:
                 heading -= 360
 

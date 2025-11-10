@@ -36,6 +36,7 @@ setup(
             "gnss_odom_publisher_ttyUSB = orange_gnss.gnss_odom_publisher_ttyUSB:main",
             "GPSodom_correction = orange_gnss.GPSodom_correction:main",
             "lonlat_to_odom = orange_gnss.lonlat_to_odom:main",
+            "odom_combination = orange_gnss.odom_combination:main",
             "ekf_myself_noGPS = orange_gnss.ekf_myself_noGPS:main"
         ],
     },

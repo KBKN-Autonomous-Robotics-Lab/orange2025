@@ -5,6 +5,9 @@ from launch import LaunchDescription
 from launch_ros.actions import Node
 from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
 
 def generate_launch_description():
     rviz_config_dir = os.path.join(
@@ -18,7 +21,31 @@ def generate_launch_description():
         'livox_to_pointcloud2.launch.py'
     )
     
+    # define config
+    odom = LaunchConfiguration('odom')
+    declare_odom_arg = DeclareLaunchArgument(
+        'odom',
+        default_value='/fusion/odom',
+        description='Odometry topic name'
+    )
+    
+    waypoint_path = LaunchConfiguration('waypoint_path')
+    declare_waypoint_arg = DeclareLaunchArgument(
+        'waypoint_path',
+        default_value='kbkn_maps/waypoints/tsukuba/2025/papa/tsukuba_waypoint.yaml',
+        description='waypoint name'
+    )
+    
+    waypoint_start_index = LaunchConfiguration('waypoint_start_index')
+    declare_waypoint_start_arg = DeclareLaunchArgument(
+        'waypoint_start_index',
+        default_value= '0',
+        description='waypoint start index'
+    )
+    
     return LaunchDescription([
+        declare_odom_arg, declare_waypoint_arg, declare_waypoint_start_arg,
+        
         #rviz2
         Node(package='rviz2',
             executable='rviz2',
@@ -37,6 +64,14 @@ def generate_launch_description():
             name='pcd_rotation_node',
             output='screen',
             arguments=[]
+        ),
+        
+        #odom combination
+        Node(package='orange_gnss',
+            executable='odom_combination',
+            name='odom_combination',
+            output='screen',
+            arguments=[],
         ),
    
         #gps ekf edit
@@ -68,6 +103,9 @@ def generate_launch_description():
             executable='gps_waypoint',
             name='gps_waypoint',
             output='screen',
+            parameters=[{'odom': odom},
+                        {'waypoint_path': waypoint_path},
+                        {'waypoint_start_index': waypoint_start_index}],
             arguments=[],
         ),
         # $ ros2 run navigation_control gps_waypoint
@@ -85,6 +123,7 @@ def generate_launch_description():
             executable='potential_astar',
             name='potential_astar_node',
             output='screen',
+            parameters=[{'odom': odom}],
             arguments=[],
         ),
         #robot ctrl
@@ -92,6 +131,7 @@ def generate_launch_description():
             executable='path_follower',
             name='path_follower_node',
             output='screen',
+            parameters=[{'odom': odom}],
             arguments=[],
         ),
         
@@ -103,12 +143,12 @@ def generate_launch_description():
             arguments=[],
         ),
         #takamori Autonav
-        Node(package='try_navigation',
-            executable='reflection_to_pcd',
-            name='reflection_to_pcd',
-            output='screen',
-            arguments=[],
-        ),
+        #Node(package='try_navigation',
+        #    executable='reflection_to_pcd',
+        #    name='reflection_to_pcd',
+        #    output='screen',
+        #    arguments=[],
+        #),
         #takamori Selfdrive
         #Node(package='try_navigation',
         #    executable='self_drive_line',

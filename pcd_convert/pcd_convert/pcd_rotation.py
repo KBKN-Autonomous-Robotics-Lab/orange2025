@@ -40,15 +40,15 @@ class PcdRotation(Node):
         
         #パラメータ
         #set LiDAR position
-        self.MID360_HIGHT = 980/1000; #hight position[m]
+        self.MID360_HIGHT = 0.7591330944995458; #hight position[m]
             
         #上下反転  LiDAR init
         self.THETA_INIT_X = 180 #[deg]
-        self.THETA_INIT_Y = 0 #[deg]
+        self.THETA_INIT_Y = 1.9599281221467226 #[deg]
         self.THETA_INIT_Z = 0 #[deg]
         
         #initialize calibration
-        self.initialize_calibration = 0
+        self.initialize_calibration = 1
         self.pcd_buff = np.array([[],[],[],[]]);
         self.x1_init_point = 1.5
         self.x2_init_point = 2.5
@@ -143,7 +143,7 @@ class PcdRotation(Node):
         
         #publish for rviz2
         if self.initialize_calibration == 1:
-            self.pcd_rotation = point_cloud_intensity_msg(pointcloud_intensity.T, t_stamp, 'map')
+            self.pcd_rotation = point_cloud_intensity_msg(pointcloud_intensity.T, t_stamp, 'odom')
             self.pcd_rotation_publisher.publish(self.pcd_rotation ) 
         
     def pcd_serch(self, pointcloud, x_min, x_max, y_min, y_max):

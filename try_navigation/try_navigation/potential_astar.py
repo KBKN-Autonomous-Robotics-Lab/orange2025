@@ -58,10 +58,16 @@ class PotentialAStar(Node):
             depth = 1
         )
         
+        # set parameter (launch can change this parameter)
+        self.declare_parameter('odom', '/fusion/odom')
+        
+        # define parameter
+        odom_topic = self.get_parameter('odom').get_parameter_value().string_value
+        
         # Subscriptionを作成。CustomMsg型,'/livox/lidar'という名前のtopicをsubscribe。
         self.subscription = self.create_subscription(sensor_msgs.PointCloud2, '/pcd_segment_obs', self.potential_astar, qos_profile)
         #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom/wheel_imu', self.get_odom, qos_profile_sub)
-        self.subscription = self.create_subscription(nav_msgs.Odometry,'/fusion/odom', self.get_odom, qos_profile_sub)
+        self.subscription = self.create_subscription(nav_msgs.Odometry, odom_topic, self.get_odom, qos_profile_sub) # /odom/wheel_spimu
         #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom_fast', self.get_odom, qos_profile_sub)
         #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom_ekf_match', self.get_odom, qos_profile_sub)
         self.subscription = self.create_subscription(geometry_msgs.PoseArray,'/current_waypoint', self.get_waypoint, qos_profile_sub)
@@ -108,8 +114,10 @@ class PotentialAStar(Node):
         self.cg2nd=20 #ポテンシャルの引力パラメータ
         self.lg2nd=20 #ポテンシャルの引力パラメータ
         self.co2nd=11 #ポテンシャルの斥力パラメータ SICKパラ目：co=11;lo=0.55;
-        self.lo2nd=0.22#55 #0.5#0.9#ポテンシャルの斥力パラメータ  24/11/29 ok IGVC20250601 0.25 -> 0.22
+        self.lo2nd=0.2#55 #0.5#0.9#ポテンシャルの斥力パラメータ  24/11/29 ok IGVC20250601 0.25 -> 0.22
         #self.lo2nd=0.30#55 #0.5#0.9#ポテンシャルの斥力パラメータ
+        
+        self.obs_route_range = 1.6 #def:1.8
         
         
         
@@ -176,6 +184,12 @@ class PotentialAStar(Node):
             [   0,      0,    0,       0,        1,        0,       0,      0]  # waypoint 21 GOAL!!!!!!
         ]
         
+        #tukuba_obs_x =np.linspace(-45,25,860);
+        #tukuba_obs_y =np.linspace(97,94,860);
+        #tukuba_obs_z =np.linspace(0,0,860);
+        #self.tsukuba_obs = np.array([tukuba_obs_x, tukuba_obs_y, tukuba_obs_z]);
+        self.tsukuba_obs = np.array([[],[],[]])
+               
         
         ################# IGVC SelfDrive Quolification line stop test #20250530# #################
         self.sd_line_stop_test = 0
@@ -346,7 +360,7 @@ class PotentialAStar(Node):
         #print(f"points ={points.shape}")
         
         self.dot_obs_points = np.vstack((points[0,:], points[1,:], points[2,:]))
-        
+            
     def potential_astar(self, msg):
         
         #print stamp message
@@ -414,6 +428,15 @@ class PotentialAStar(Node):
             elif self.obs_info[self.waypoint_number][self.dotline_info] == 1:
                 dot_line_local = localization_xyz(self.dot_obs_points, position_x, position_y, theta_x, theta_y, theta_z)
         
+        self_radius = 0.8
+        angle_min = -60 + 180
+        angle_max = 60 + 180
+        angles = np.linspace(np.radians(angle_min),np.radians(angle_max),100)
+        x_radius = self_radius * np.cos(angles)
+        y_radius = self_radius * np.sin(angles)
+        z_radius = 0 * np.cos(angles)
+        self_radius_points = np.vstack((x_radius, y_radius, z_radius))
+        
         """
         #map_obs add
         if len(self.map_obs_points[0,:])>0:
@@ -424,6 +447,25 @@ class PotentialAStar(Node):
         else:
             relative_point_rot = np.array([[],[],[]])
         """    
+        
+        # make map_obs   x1  x2  y1  y2
+        obs1 = make_obs(-45, 25, 97, 94) # siyakusyoura minami
+        obs2 = make_obs(  5, 21, 100, 101) # siyakusyoura kita
+        obs3 = make_obs(-73,-75, 105, 29) # siyakusyo nisi
+        obs4 = make_obs( 61,100, 32, 41) # siyakusyo oudanhodou
+        obs5 = make_obs(276,270, 28,-58) # sinngoumae oudanhodou
+
+        #self.tsukuba_obs = np.hstack((obs1, obs2, obs3, obs4, obs5))
+        self.tsukuba_obs = np.hstack((obs4, obs5))
+        
+        #map_obs add
+        if len(self.tsukuba_obs[0,:])>0:
+            relative_point_x = self.tsukuba_obs[0,:] - self.position_x
+            relative_point_y = self.tsukuba_obs[1,:] - self.position_y
+            relative_point = np.array((relative_point_x, relative_point_y, self.tsukuba_obs[2,:]))
+            relative_point_rot, t_point_rot_matrix = rotation_xyz(relative_point, self.theta_x, self.theta_y, -self.theta_z)
+        else:
+            relative_point_rot = np.array([[],[],[]])
         ###################################
                 
         #obs round&duplicated  :grid_size before:28239 after100:24592 after50:8894 after10:3879
@@ -456,7 +498,9 @@ class PotentialAStar(Node):
         if dot_line_local.shape[1] > 0:
             obs_points = np.insert(obs_points, len(obs_points[0,:]), dot_line_local.T, axis=1)
         
-        #obs_points = np.insert(obs_points, len(obs_points[0,:]), relative_point_rot.T, axis=1)
+        obs_points = np.insert(obs_points, len(obs_points[0,:]), relative_point_rot.T, axis=1)
+        obs_points = np.insert(obs_points, len(obs_points[0,:]), self_radius_points.T, axis=1)
+        #obs_points = np.insert(obs_points, len(obs_points[0,:]), self.tsukuba_obs.T, axis=1)
         points_round = np.round(obs_points * self.obs_pixel) / self.obs_pixel
         obs_xy_local = points_round[:,~pd.DataFrame({"x":points_round[0,:], "y":points_round[1,:]}).duplicated()]
         obs_xy = np.vstack((obs_xy_local[0,:], obs_xy_local[1,:]))
@@ -589,7 +633,7 @@ class PotentialAStar(Node):
         self.get_logger().info(f"astar_judge_x2 ={len(astar_judge_x2)}")
         self.get_logger().info(f"astar_path_x_rev2 ={len(astar_path_x_rev2)}")
         if len(astar_judge_x2) > 0:
-            astar_judge_obs_ind = np.minimum.reduce( np.sqrt(astar_judge_x2 + astar_judge_y2) ) <1.8#1.6
+            astar_judge_obs_ind = np.minimum.reduce( np.sqrt(astar_judge_x2 + astar_judge_y2) ) <self.obs_route_range#1.8#1.6
             self.get_logger().info(f"astar_judge_obs_ind ={astar_judge_obs_ind}")
             astar_path_point_x = np.append(np.append(self.est_xy[0],astar_x[astar_path_x_rev2[astar_judge_obs_ind]]),self.wp_xy[0])
             astar_path_point_y = np.append(np.append(self.est_xy[1],astar_y[astar_path_y_rev2[astar_judge_obs_ind]]),self.wp_xy[1])
@@ -713,6 +757,11 @@ def path_msg(waypoints, stamp, parent_frame):
         wp_msg.poses.append(waypoint)
     return wp_msg
 
+def make_obs(x1, x2, y1, y2, n=860, z=0):
+    x = np.linspace(x1, x2, n)
+    y = np.linspace(y1, y2, n)
+    z = np.full(n, z)
+    return np.array([x, y, z])
 
 # mainという名前の関数です。C++のmain関数とは異なり、これは処理の開始地点ではありません。
 def main(args=None):

@@ -492,6 +492,7 @@ class MotorDriverNode(Node):
         )  # unit in meter
         return l_travelled, r_travelled
 
+    '''
     def modbus_fail_read_handler(self, ADDR, WORD):
         read_success = False
         reg = [None] * WORD
@@ -506,6 +507,34 @@ class MotorDriverNode(Node):
                 self.get_logger().error(e)
                 pass
         return reg
+        '''
+    def modbus_fail_read_handler(self, ADDR, WORD, max_retry=5):
+        read_success = False
+        reg = [0] * WORD
+        retry_count = 0
+
+        while not read_success and retry_count < max_retry:
+            result = self.client.read_holding_registers(ADDR, WORD, slave=self.ID)
+            if result is None or not hasattr(result, "registers"):
+                self.get_logger().warn(f"Modbus read failed (try {retry_count+1}/{max_retry})")
+                time.sleep(0.2)
+                retry_count += 1
+                continue
+
+            try:
+                for i in range(WORD):
+                    reg[i] = result.registers[i]
+                read_success = True
+            except Exception as e:
+                self.get_logger().error(f"Read error: {e}")
+                retry_count += 1
+                time.sleep(0.2)
+
+        if not read_success:
+            self.get_logger().error(f"Modbus read failed after {max_retry} retries. Stopping.")
+            raise RuntimeError("Modbus communication failed.")
+    
+        return reg  
 
     def set_rpm_with_limit(self, left_rpm, right_rpm):
         if self.left_rpm_lim < left_rpm:
@@ -774,3 +803,4 @@ def main(args=None):
 
 if __name__ == "__main__":
     main()
+

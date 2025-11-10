@@ -16,6 +16,8 @@ from geometry_msgs.msg import PoseStamped
 from std_msgs.msg import Int32
 from std_msgs.msg import String
 
+
+
 # C++と同じく、Node型を継承します。
 class PathFollower(Node):
     # コンストラクタです、PcdRotationクラスのインスタンスを作成する際に呼び出されます。
@@ -42,16 +44,16 @@ class PathFollower(Node):
         
         # Subscriptionを作成。
         self.subscription = self.create_subscription(nav_msgs.Path, '/potential_astar_path', self.get_path, qos_profile) #set subscribe pcd topic name
-        #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom/wheel_imu', self.get_odom, qos_profile_sub)
+        #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom/wheel_imu', self.get_odom, qos_profile_sub) # /odom/wheel_spimu
         self.subscription = self.create_subscription(nav_msgs.Odometry,'/fusion/odom', self.get_odom, qos_profile_sub)
         #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom_ekf_match', self.get_odom, qos_profile_sub)
         #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom_ref_slam', self.get_odom_ref, qos_profile_sub)
-        self.subscription = self.create_subscription(nav_msgs.Odometry,'/fusion/odom', self.get_odom_ref, qos_profile_sub)
+        self.subscription = self.create_subscription(nav_msgs.Odometry,'/fusion/odom', self.get_odom_ref, qos_profile_sub) #/fusion/odom
         self.subscription = self.create_subscription(sensor_msgs.PointCloud2, '/pcd_segment_obs', self.obs_steer, qos_profile)
         self.goal_sub = self.create_subscription(PoseStamped, '/goal_pose', self.goal_pose_callback, qos_profile)
         self.stop_sub = self.create_subscription(String, '/stop_sign_status', self.stop_sign_callback, 10)
         self.human_sub = self.create_subscription(String, '/human_status', self.human_callback, 10)
-        self.waypoint_number_subscription = self.create_subscription(Int32,'/waypoint_number', self.get_waypoint_number, qos_profile_sub)
+        self.waypoint_number_sub = self.create_subscription(Int32, '/waypoint_number', self.get_waypoint_number, 10)
         self.subscription  # 警告を回避するために設置されているだけです。削除しても挙動はかわりません。
         
         # タイマーを0.05秒（50ミリ秒）ごとに呼び出す
@@ -60,7 +62,9 @@ class PathFollower(Node):
         
         # Publisherを作成
         self.cmd_vel_publisher = self.create_publisher(geometry_msgs.Twist, 'cmd_vel', qos_profile) #set publish pcd topic name
-        
+        self.pcd_test_publisher = self.create_publisher(sensor_msgs.PointCloud2, 'pcd_test_global', qos_profile) 
+        #self.marker_pub = self.create_publisher(MarkerArray, 'wall_follow_markers', 10)
+
         #パラメータ init
         self.path_plan = np.array([[0],[0],[0]])
         
@@ -131,14 +135,32 @@ class PathFollower(Node):
             #[-69.5,	-62,	-47.5,	-27.5, 1.0], #tyokusen4 ||| [-67.5,	-62,	-47.5,	-27.5, 1.0]before:[-67.0,	-62,	-47.5,	-27.5, 1.0], 
             #[-55,	-35,	41,	46,    1.0], #Goal
             
-            
-            [ 999,  999, 999, 999, 0.0] ]) #
+            #[ 10.0,  12.0,  -10.0,  10.0, 1.0], #test
+            [ 63.5,  65.0,  19.0,  39.0, 1.0], #shiyakusyo
+            [ 99.5, 101.0,  25.0,  45.0, 1.0], #dourotan1
+            [177.0, 178.5,  25.0,  45.0, 1.0], #dourotan2
+            [257.5, 277.5, -60.0, -58.5, 1.0], #singoumaeteisisen1
+            [257.5, 277.5, -67.0, -65.5, 1.0], #singoumae1
+            [256.5, 276.5, -87.5, -86.0, 1.0], #singoumaeteisisen2
+            [270.0, 271.0, -99.0, -79.5, 1.0], #singoumae2
+            [405.0, 425.0, -80.5, -79.5, 1.0], #ekimae oudanhodou1
+            [405.0, 425.0, -71.0, -70.0, 1.0], #ekimae oudanhodou2
+            [289.0, 290.0, -98.0, -78.0, 1.0], #singoumaeteisisen3
+            [284.0, 285.0, -98.0, -78.0, 1.0], #singoumae3
+            [259.5, 279.5, -83.0, -82.0, 1.0], #singoumaeteisisen4
+            [259.5, 279.5, -80.0, -79.0, 1.0], #singoumae4
+            [184.5, 186.0,  25.0,  45.0, 1.0], #dourotan3
+            [107.0, 108.5,  25.0,  45.0, 1.0], #dourotan4
+            [ 74.0,  94.0, -27.0, -26.0, 1.0], #GOAL!!!!
+            [  999,   999,   999,   999, 0.0] ]) #
         self.stop_num = 0;
         
         #obs
         self.obs_points = np.array([[],[],[],[]])
         self.rh_obs = 0
         self.lh_obs = 0
+        self.ch_obs = 0
+        self.t_stamp = 0
         
         
         ################# IGVC SelfDrive Quolification line stop test #20250530# #################
@@ -165,12 +187,12 @@ class PathFollower(Node):
         #################################################################################
         
         ################# IGVC SelfDrive Full #20250601# #################
-        self.sd_full_flag = 1 #root flag
+        self.sd_full_flag = 0 #root flag
         self.waypoint_number = 0
-        self.sd_full_human_stop = 1  #sub flag
+        self.sd_full_human_stop = 0  #sub flag
         if self.sd_full_human_stop == 1:
             self.sd_c_obs_stop_dist = self.sd_human_stop_dist
-        self.sd_full_sign_stop = 1 #sub flag
+        self.sd_full_sign_stop = 0 #sub flag
         if self.sd_full_sign_stop == 1:
             dist = 0.5 + 0.4 + 0.5# eria +top +delay
             sd_full_stop_xy = [-32.37441428909107, -16.465277566213718, 0.0]
@@ -181,7 +203,7 @@ class PathFollower(Node):
         self.previous_status = None    
         self.human_status = None    
         ##################################################################
-        
+
     # actionリクエストの受信時に呼ばれる(tuika)
     def listener_callback(self, goal_handle):
         self.get_logger().info(f"Received goal with a: {goal_handle.request.a}, b: {goal_handle.request.b}")
@@ -360,13 +382,54 @@ class PathFollower(Node):
             target_rad = -lim_steer/180*math.pi
         '''
         
+        rh_obs = self.rh_obs
+        lh_obs = self.lh_obs
+        ch_obs = self.ch_obs
+        #c_obs_near = ( -50<obs_theta) * (obs_theta<  50) * (obs_dist<0.5)
+        #c_obs_back = ( -50<obs_theta) * (obs_theta<  50) * (obs_dist<0.4)
+        cf = 1.15
+                
+        if ~np.any(ch_obs) :
+            if np.any(rh_obs) and np.any(lh_obs):
+                target_theta = (target_rad) * (180 / math.pi)
+                #print("--- Center --- Befor target_theta[deg]:",target_theta)
+                speed = 0.25
+                lh_obs_close = min(lh_obs[1,:]) # y0 lh min
+                rh_obs_close = max(rh_obs[1,:]) # y0 rh min
+                cy = cf
+                cx = (lh_obs_close + rh_obs_close) / 2
+                #c_point = (cx, cy)
+                target_rad = math.atan2(cx, cf)
+                target_theta = (target_rad) * (180 / math.pi)
+                #print("--- Center --- After target_theta[deg]:",target_theta)
+                            
+            elif np.any(rh_obs) and ~np.any(lh_obs):
+                speed = 0.25
+                if 6 <= self.waypoint_number and self.waypoint_number <= 8:
+                    target_theta = (target_rad) * (180 / math.pi)
+                    #print("!!!RH!!!! Befor target_theta[deg]:",target_theta)
+                    rh_obs_close = max(rh_obs[1,:]) # y0 rh min
+                    rh_dist = 0.65
+                    cy = cf
+                    cx = rh_obs_close + rh_dist
+                    target_rad = math.atan2(cx, cf)
+                    target_theta = (target_rad) * (180 / math.pi)
+                    #print("!!!RH!!!! After target_theta[deg]:",target_theta)
+                    
+            
+            elif ~np.any(rh_obs) and np.any(lh_obs):
+                speed = 0.25
+            
+            #elif ~np.any(rh_obs) and ~np.any(lh_obs):
+            #    speed = 0.25
+                           
         lim_steer = 20
         #lim_steer = 30 24/11/29 ok
         #if abs(target_theta) < 10 and 0.0 < speed and speed < 0.5:
         if abs(target_theta) < 10:
             if 0.0 < speed:
                 if speed < 0.5:
-                    speed = 1.1 # autonav 0.8
+                    speed = 0.5 # autonav 0.8
         #elif target_theta  < -lim_steer:
         if target_theta  < -lim_steer:
             speed = 0.10
@@ -379,7 +442,7 @@ class PathFollower(Node):
             speed = -0.10
         if np.any(c_obs_back) :
             speed = 0.10
-        
+
         
         ################# IGVC SelfDrive Full #20250601# #################
         if self.sd_full_flag == 1:
@@ -498,7 +561,7 @@ class PathFollower(Node):
         #else:
         #    speed = 0.2
         #self.get_logger().info('speed = %f' % (speed))
-        target_theta = target_theta +90/180*math.pi
+        target_theta = target_theta +90     ######/180*math.pi
         target_rad_pd = self.sensim0(target_rad)
         #target_rad_pd = target_rad
         
@@ -572,7 +635,6 @@ class PathFollower(Node):
         self.ref_theta_y = 0 #pitch /math.pi*180
         self.ref_theta_z = yaw /math.pi*180
         
-        
         if ((self.stop_xy[self.stop_num,0] < self.ref_position_x) and (self.ref_position_x < self.stop_xy[self.stop_num,1]) and (self.stop_xy[self.stop_num,2] < self.ref_position_y) and (self.ref_position_y < self.stop_xy[self.stop_num,3]) ) or ((self.stop_xy[self.stop_num,0] < self.position_x) and (self.position_x < self.stop_xy[self.stop_num,1]) and (self.stop_xy[self.stop_num,2] < self.position_y) and (self.position_y < self.stop_xy[self.stop_num,3]) ):
             if self.stop_xy[self.stop_num,4] > 0:
                 self.get_logger().info('####### stop flag on %f #######' % (self.stop_num))
@@ -580,7 +642,6 @@ class PathFollower(Node):
             else:
                 self.get_logger().info('####### through flag on %f #######' % (self.stop_num))
             self.stop_num = self.stop_num + 1;
-            
         
     def pointcloud2_to_array(self, cloud_msg):
         # Extract point cloud data
@@ -600,6 +661,7 @@ class PathFollower(Node):
         #print stamp message
         t_stamp = msg.header.stamp
         #print(f"t_stamp ={t_stamp}")
+        self.t_stamp = t_stamp
         
         #get pcd data
         points = self.pointcloud2_to_array(msg)
@@ -608,21 +670,46 @@ class PathFollower(Node):
         #map_obs
         self.obs_points = points
         
-        rh_obs = self.pcd_serch(points, -0.2,1,0,0.7)
+        rh_obs = self.pcd_serch(points, 1.0,1.3,-0.7,0)
         if len(rh_obs[0,:]) > 10:
             self.rh_obs = 1
         else:
             self.rh_obs = 0
-        lh_obs = self.pcd_serch(points, -0.2,1,-0.7,0)
+        lh_obs = self.pcd_serch(points, 1.0,1.3,0,0.7)
         if len(lh_obs[0,:]) > 10:
             self.lh_obs = 1
         else:
             self.lh_obs = 0
+        
+        ch_obs = self.pcd_serch(points, 1.0,1.3,-0.4,0.4)
+            
+        self.rh_obs = rh_obs
+        self.lh_obs = lh_obs
+        self.ch_obs = ch_obs
+        
+        #print(lh_obs.shape)
+        #print("x0 min",min(lh_obs[0,:]))
+        #print("x0 max",max(lh_obs[0,:]))
+        #print("y0 min",min(lh_obs[1,:])) ###ok!!!!!!!!!
+        #print("y0 max",max(lh_obs[1,:]))
+        
+        #print("y0 rh min",max(rh_obs[1,:]))
+        
+        #global test obs rviz2 kesu
+        obs_test_msg = point_cloud_intensity_msg(ch_obs.T, t_stamp, 'odom')
+        self.pcd_test_publisher.publish(obs_test_msg) 
 
-    def pcd_serch(self, pointcloud, x_min, x_max, y_min, y_max):
-        pcd_ind = (( (x_min <= pointcloud[0,:]) * (pointcloud[0,:] <= x_max)) * ((y_min <= pointcloud[1,:]) * (pointcloud[1,:]) <= y_max ) )
-        pcd_mask = pointcloud[:, pcd_ind]
-        return pcd_mask
+    # pcd_serch を z も考慮する形で置換（点群抽出用ユーティリティ）
+    def pcd_serch(self, pointcloud, x_min, x_max, y_min, y_max, z_min=None, z_max=None):
+        """
+        pointcloud: 4 x N array (x,y,z,intensity)
+        returns: filtered 4 x M array
+        """
+        mask = ((pointcloud[0, :] >= x_min) & (pointcloud[0, :] <= x_max) &
+                (pointcloud[1, :] >= y_min) & (pointcloud[1, :] <= y_max))
+        if z_min is not None and z_max is not None:
+            mask = mask & ((pointcloud[2, :] >= z_min) & (pointcloud[2, :] <= z_max))
+        return pointcloud[:, mask]
 
 def rotation_xyz(pointcloud, theta_x, theta_y, theta_z):
     theta_x = math.radians(theta_x)
@@ -658,6 +745,41 @@ def quaternion_to_euler(x, y, z, w):
     pitch = np.arctan2(-rot_matrix[2, 0], np.sqrt(rot_matrix[2, 1]**2 + rot_matrix[2, 2]**2))
     yaw = np.arctan2(rot_matrix[1, 0], rot_matrix[0, 0])
     return roll, pitch, yaw
+
+def point_cloud_intensity_msg(points, t_stamp, parent_frame):
+    # In a PointCloud2 message, the point cloud is stored as an byte 
+    # array. In order to unpack it, we also include some parameters 
+    # which desribes the size of each individual point.
+    ros_dtype = sensor_msgs.PointField.FLOAT32
+    dtype = np.float32
+    itemsize = np.dtype(dtype).itemsize # A 32-bit float takes 4 bytes.
+    data = points.astype(dtype).tobytes() 
+
+    # The fields specify what the bytes represents. The first 4 bytes 
+    # represents the x-coordinate, the next 4 the y-coordinate, etc.
+    fields = [
+            sensor_msgs.PointField(name='x', offset=0, datatype=ros_dtype, count=1),
+            sensor_msgs.PointField(name='y', offset=4, datatype=ros_dtype, count=1),
+            sensor_msgs.PointField(name='z', offset=8, datatype=ros_dtype, count=1),
+            sensor_msgs.PointField(name='intensity', offset=12, datatype=ros_dtype, count=1),
+        ]
+
+    # The PointCloud2 message also has a header which specifies which 
+    # coordinate frame it is represented in. 
+    header = std_msgs.Header(frame_id=parent_frame, stamp=t_stamp)
+    
+
+    return sensor_msgs.PointCloud2(
+        header=header,
+        height=1, 
+        width=points.shape[0],
+        is_dense=True,
+        is_bigendian=False,
+        fields=fields,
+        point_step=(itemsize * 4), # Every point consists of three float32s.
+        row_step=(itemsize * 4 * points.shape[0]), 
+        data=data
+    )
         
 # mainという名前の関数です。C++のmain関数とは異なり、これは処理の開始地点ではありません。
 def main(args=None):

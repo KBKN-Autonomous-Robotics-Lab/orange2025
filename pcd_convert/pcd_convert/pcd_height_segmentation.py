@@ -41,17 +41,17 @@ class PcdHeightSegmentation(Node):
         
         #パラメータ
         #set obs range
-        self.OBS_HIGHT_MIN =   555/1000; #hight range[m]
-        self.OBS_HIGHT_MAX =  4000/1000; #hight range[m]
-        self.OBS_MASK_X_MIN = -550/1000; #x mask range[m]
-        self.OBS_MASK_X_MAX =  400/1000; #x mask range[m]
-        self.OBS_MASK_Y_MIN = -350/1000; #y mask range[m]
-        self.OBS_MASK_Y_MAX =  350/1000; #y mask range[m]
+        self.OBS_HIGHT_MIN =   450/1000; #hight range[m]
+        self.OBS_HIGHT_MAX =  2000/1000; #hight range[m]
+        self.OBS_MASK_X_MIN = -200/1000; #x mask range[m]
+        self.OBS_MASK_X_MAX =  650/1000; #x mask range[m]
+        self.OBS_MASK_Y_MIN = -450/1000; #y mask range[m]
+        self.OBS_MASK_Y_MAX =  450/1000; #y mask range[m]
         #set ground range
         self.GROUND_HIGHT_MIN = -10/1000; #hight range[m] # IGVC20250601 -150 -> -10
         self.GROUND_HIGHT_MAX =  150/1000; #hight range[m]
         #set step range
-        self.STEP_HIGHT_MIN =   550/1000; #hight range[m]
+        self.STEP_HIGHT_MIN =   300/1000; #hight range[m]
         self.STEP_HIGHT_MAX =   self.OBS_HIGHT_MIN# 200/1000; #hight range[m]
         self.STEP_X_MIN     = -1500/1000; #x mask range[m]
         self.STEP_X_MAX     =  2000/1000; #x mask range[rosbag2_2024_10_26-03_14_14_20241026_kakunin_bag1m]
@@ -96,6 +96,7 @@ class PcdHeightSegmentation(Node):
         
         #step segment
         pcd_step = self.height_segment(points, self.STEP_HIGHT_MIN, self.STEP_HIGHT_MAX)
+        #pcd_step = self.pcd_mask(pcd_step_raw, self.OBS_MASK_X_MIN, self.OBS_MASK_X_MAX, self.OBS_MASK_Y_MIN, self.OBS_MASK_Y_MAX)
         #pcd_step_height_under = self.height_segment(points, -self.STEP_HIGHT_MAX, -self.STEP_HIGHT_MIN)
         #pcd_step = np.insert(pcd_step, len(pcd_step[0,:]), pcd_step_height_under.T, axis=1)
         #pcd_step = self.pcd_serch(pcd_step9, self.STEP_X_MIN, self.STEP_X_MAX, self.STEP_Y_MIN, self.STEP_Y_MAX)
@@ -108,7 +109,6 @@ class PcdHeightSegmentation(Node):
         self.pcd_segment_ground_publisher.publish(self.pcd_segment_ground ) 
         self.pcd_segment_step = point_cloud_intensity_msg(pcd_step.T, t_stamp, 'odom')
         self.pcd_segment_step_publisher.publish(self.pcd_segment_step ) 
-        
     def height_segment(self, pointcloud, height_min, height_max):
         pcd_ind = ((height_min <= pointcloud[2,:]) * (pointcloud[2,:] <= height_max ))
         pcd_segment = pointcloud[:, pcd_ind]
