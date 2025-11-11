@@ -456,9 +456,10 @@ class PotentialAStar(Node):
         obs7 = make_obs(276,270, 28,-58) # 7-Eleven mae
         obs8 = make_obs(-21,-39, 24, 27) # siyakusyo sibahu1
         obs9 = make_obs(-51,-39, 37, 27) # siyakusyo sibahu2
+        obs10 = make_obs(36.5,36.5, 62, 96.5) # siyakusyo higasi
         
 
-        self.tsukuba_obs = np.hstack((obs1, obs2, obs3, obs4, obs5, obs6, obs7, obs8, obs9))
+        self.tsukuba_obs = np.hstack((obs1, obs4, obs5, obs6, obs7, obs8, obs9, obs10))
         
         #map_obs add
         if len(self.tsukuba_obs[0,:])>0:

@@ -135,7 +135,7 @@ class PathFollower(Node):
             #[-69.5,	-62,	-47.5,	-27.5, 1.0], #tyokusen4 ||| [-67.5,	-62,	-47.5,	-27.5, 1.0]before:[-67.0,	-62,	-47.5,	-27.5, 1.0], 
             #[-55,	-35,	41,	46,    1.0], #Goal
             
-            [ 63.5,  65.0,  19.0,  39.0, 1.0], #shiyakusyo
+            [ 63.0,  64.5,  19.0,  39.0, 1.0], #shiyakusyo
             [ 99.5, 101.0,  25.0,  45.0, 1.0], #dourotan1
             [177.0, 178.5,  25.0,  45.0, 1.0], #dourotan2
             [257.5, 277.5, -60.0, -58.5, 1.0], #singoumaeteisisen1
@@ -423,10 +423,9 @@ class PathFollower(Node):
                     target_theta = (target_rad) * (180 / math.pi)
                     print("!!!RH!!!! After target_theta[deg]:",target_theta)
                     
-            elif np.any(lh_obs) and ~np.any(rh_obs):  #左寄り
+            elif np.any(lh_obs) and ~np.any(rh_obs):  #左寄り 11 <= self.waypoint_number <= 12 \ 
                 speed = 0.25
-                if 11 <= self.waypoint_number <= 12 \
-                or ((25 <= self.waypoint_number <= 28) and (-90 - self.angle_diff <= theta_z <= -90 + self.angle_diff)) \
+                if ((25 <= self.waypoint_number <= 28) and (-90 - self.angle_diff <= theta_z <= -90 + self.angle_diff)) \
                 or ((56 <= self.waypoint_number <= 60) and (-150 <= theta_z <= -150 - self.angle_diff) and (150  <= theta_z <= 150 + self.angle_diff)) :
                     target_theta = (target_rad) * (180 / math.pi)
                     print("!!!LH!!!! Befor target_theta[deg]:",target_theta)
