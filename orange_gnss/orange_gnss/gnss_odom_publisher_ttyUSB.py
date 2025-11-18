@@ -251,7 +251,8 @@ class GPSData(Node):
 
         if self.count == 0:
             self.get_logger().info(f"!!!----------robotheading: {robotheading} deg----------!!!")
-            self.first_heading = robotheading
+            #self.first_heading = robotheading
+            self.first_heading = self.tsukuba_theta
             self.count = 1
 
         relative_heading = robotheading - self.first_heading
@@ -360,9 +361,9 @@ class GPSData(Node):
             #self.lonlat_pub.publish(self.lonlat_msg)
             # self.get_logger().info(f"Published GPS data: {lonlat}")           
             
-            if self.initial_coordinate is None:
-                self.initial_coordinate = [GPS_data[1], GPS_data[2]]        
-            GPSxy = self.conversion(lonlat, self.initial_coordinate, self.theta)
+            #if self.initial_coordinate is None:
+            #    self.initial_coordinate = [GPS_data[1], GPS_data[2]]        
+            GPSxy = self.conversion(lonlat, self.start_GPS_coordinate, self.tsukuba_theta)
             GPSquat = self.heading_to_quat(GPS_data[5])       
 
             self.odom_msg.header.stamp = self.get_clock().now().to_msg()

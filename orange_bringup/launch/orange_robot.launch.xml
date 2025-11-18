@@ -58,13 +58,13 @@
     <param name="odom_child_frame" value="base_footprint"/>
   </node>
   <!-- estop  -->
-  <node pkg="estop_ros" exec="cmd_vel_override_node" output="screen">
+  <!--<node pkg="estop_ros" exec="cmd_vel_override_node" output="screen">
     <param name="port" value="/dev/sensors/estop"/>
     <param name="baudrate" value="115200"/>
     <param name="time_out" value="500"/>
     <param name="serial_interval" value="0.01"/>
     <remap from="/estop/state" to="/estop"/>
-  </node>
+  </node>-->
 
   <!-- spresense imu -->
   <node pkg="cxd5602pwbimu" exec="cxd5602pwbimu_node">
@@ -119,9 +119,9 @@
     <param name="baud" value="115200"/>
     <param name="country_id" value="0"/>
     <param name="Position_magnification" value="1.675"/>
-    <param name="heading" value="93.0"/>
-    <param name="start_lat" value="36.04973847576364"/>
-    <param name="start_lon" value="140.0459354109091"/>
+    <param name="heading" value="180.0"/>
+    <param name="start_lat" value="35.425952230280004"/>
+    <param name="start_lon" value="139.31380123427"/>
     <param name="time_out" value="1.0"/>
   </node>
   <!-- 
