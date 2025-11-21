@@ -52,6 +52,7 @@ class ExtendedKalmanFilter(Node):
         self.RR_count_bad = 0
         self.RR_count_so = 0
         self.kalf_speed_param = 1.05
+        self.kalf_speed_param_noGPS = 1.03
         self.gps_rr_flag = 1
         self.offsetyaw_bad_gps = 0
 
@@ -67,7 +68,7 @@ class ExtendedKalmanFilter(Node):
         
 
         self.sub_a = self.create_subscription(
-            Odometry, '/odom/combine', self.sensor_a_callback, 10) # /odom/wheel_spimu /odom/combine
+            Odometry, '/odom/combine', self.sensor_a_callback, 10) # /odom/wheel_spimu
         self.sub_b = self.create_subscription(
             Odometry, '/odom/UM982', self.sensor_b_callback, 10)
         #self.sub_b = self.create_subscription(
@@ -133,7 +134,7 @@ class ExtendedKalmanFilter(Node):
 
         self.GTheta = self.orientation_to_yaw(
             data.pose.pose.orientation.z, data.pose.pose.orientation.w)
-            
+        
         # initialize odom
         if not self.is_initialized and self.SmpTime is not None and self.SmpTime > 0: 
             self.initialize_odomA(
@@ -175,7 +176,7 @@ class ExtendedKalmanFilter(Node):
     def determination_of_R(self):
         if self.GpsXY is not None:
             #カルマンフィルタのデッドレコニングよりになる範囲を指定
-            if (-60<self.GpsXY[0]) and (self.GpsXY[0]<60) and (20 < self.GpsXY[1]) and (self.GpsXY[1]<110):
+            if ((-60<self.GpsXY[0]) and (self.GpsXY[0]<60) and (25 < self.GpsXY[1]) and (self.GpsXY[1]<110)) or ((476<self.GpsXY[0]) and (self.GpsXY[0]<600) and (-84 < self.GpsXY[1]) and (self.GpsXY[1]<-25)) or ((-41<self.GpsXY[0]) and (self.GpsXY[0]<-7) and (-52 < self.GpsXY[1]) and (self.GpsXY[1]<71)): # last is for nakaniwa test
                 #self.gps_rr_flag = 1
                 self.gps_rr_flag = 0 #self.gps_rr_flag =1はGPS受信精度よく、0でGPS受信精度低い範囲に入ったフラグ
                 #self.offsetyaw_bad_gps = -10/180*math.pi
@@ -262,8 +263,7 @@ class ExtendedKalmanFilter(Node):
         data = (self.k_p * self.e_n + self.k_d*(self.e_n - self.e_n1))
         self.e_n1 = self.e_n
         return data
-    
-    '''
+
     def initialize(self, GTheta, SmpTime):
         self.GTheta0 = GTheta
         self.XX = np.array([0, 0, np.cos(GTheta), np.sin(GTheta)])
@@ -273,9 +273,8 @@ class ExtendedKalmanFilter(Node):
             [[(1.379e-3)**2, 0], [0, (0.03 * np.pi / 180 * SmpTime)**2]])
         G0 = np.array([[1, 0], [0, 0], [0, 0], [0, 1]])
         self.P = G0 @ self.Q @ G0.T
-    '''
-    
-    # 20251021 tuika
+        
+    # 既存の initialize メソッドの代わりに、座標を受け取る initialize_odomA を定義
     def initialize_odomA(self, x, y, GTheta, SmpTime):
         self.GTheta0 = GTheta
         # odomAの座標 (x, y) でXXを初期化
@@ -306,6 +305,9 @@ class ExtendedKalmanFilter(Node):
             
         if not self.is_initialized:
             return np.array([0, 0])
+        
+        if self.H is None:
+            self.initialize(GTheta, SmpTime)
 
         self.R = np.array([[R1, 0], [0, R2]])
 
@@ -335,13 +337,10 @@ class ExtendedKalmanFilter(Node):
     def KalfGPSXY(self, Speed, SmpTime, GTheta, GpsXY, R1, R2):
         #if self.H is None:
         #    self.initializeGPS(GpsXY, GTheta, SmpTime)
-        
+
         if not self.is_initialized:
             return np.array([0, 0])
         
-        if self.H is None:
-            self.initializeGPS(GpsXY, GTheta, SmpTime)
-
         self.R = np.array([[R1, 0], [0, R2]])
 
         DTheta = GTheta - self.GTheta0
@@ -480,7 +479,7 @@ class ExtendedKalmanFilter(Node):
                 self.get_logger().info(f"!!!!!!!!!!!!!!!!!!!!!! offsetyaw: {self.offsetyaw}!!!!!!!!!!!!!!!!!!!!!!!!!!")
                     
             #ここからカルマンフィルタ　:GPS情報が受信できている（Noneではない）＆受信精度が良い区間（sefl.gps_rr_flag=1）時に処理を行う
-            if self.GpsXY is not None and self.gps_rr_flag:#self.Number_of_satellites > #22 :
+            if self.GpsXY is not None and self.gps_rr_flag==1:#self.Number_of_satellites > #22 :
                 self.get_logger().info(f"!!!!++++++++++ Number_of_satellites: {self.Number_of_satellites}++++++++++!!!!!!!!!")
                 ########## Change the written line #######
                 #fused_value = self.KalfGPSXY(
@@ -559,7 +558,7 @@ class ExtendedKalmanFilter(Node):
                 
                 ########## Change the written line #######
                 #kalf_speed_paramは速度の神の手調整。速度が正しければ補正はいらないはず。
-                kalf_speed = self.Speed * self.kalf_speed_param
+                kalf_speed = self.Speed * self.kalf_speed_param_noGPS
                 #GPSなし持カルマンフィルタ関数実行（GPSデータなしの場合のため、デッドレコニングのみ）
                 fused_value = self.KalfXY(
                     kalf_speed, self.SmpTime, self.robot_yaw, self.R1, self.R2)

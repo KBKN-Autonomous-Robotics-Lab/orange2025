@@ -135,22 +135,25 @@ class PathFollower(Node):
             #[-69.5,	-62,	-47.5,	-27.5, 1.0], #tyokusen4 ||| [-67.5,	-62,	-47.5,	-27.5, 1.0]before:[-67.0,	-62,	-47.5,	-27.5, 1.0], 
             #[-55,	-35,	41,	46,    1.0], #Goal
             
+            [ 10.0,  11.5, -19.0,  39.0, 1.0], #nakaniwa_test
+            [ 30.0,  31.5, -19.0,  39.0, 1.0], #nakaniwa_test
             [ 63.0,  64.5,  19.0,  39.0, 1.0], #shiyakusyo
-            [ 99.5, 101.0,  25.0,  45.0, 1.0], #dourotan1
-            [177.0, 178.5,  25.0,  45.0, 1.0], #dourotan2
+            [100.5, 102.0,  25.0,  45.0, 1.0], #dourotan1
+            [178.5, 180.0,  25.0,  45.0, 1.0], #dourotan2
             [257.5, 277.5, -60.0, -58.5, 1.0], #singoumaeteisisen1
-            [257.5, 277.5, -67.0, -65.5, 1.0], #singoumae1
-            [256.5, 276.5, -87.5, -86.0, 1.0], #singoumaeteisisen2
-            [270.0, 271.0, -99.0, -79.5, 1.0], #singoumae2
-            [405.0, 425.0, -80.5, -79.5, 1.0], #ekimae oudanhodou1
-            [405.0, 425.0, -71.0, -70.0, 1.0], #ekimae oudanhodou2
-            [289.0, 290.0, -98.0, -78.0, 1.0], #singoumaeteisisen3
+            [257.5, 277.5, -68.0, -66.5, 1.0], #singoumae1
+            [256.5, 276.5, -89.0, -87.5, 1.0], #singoumaeteisisen2
+            [269.5, 270.5, -99.0, -79.5, 1.0], #singoumae2
+            [405.0, 425.0, -82.5, -81.5, 1.0], #ekimae oudanhodou1 y-1
+            [555.0, 568.0, -85.0, -71.0, 0.0], #ekimae not stop
+            [405.0, 425.0, -73.0, -72.0, 1.0], #ekimae oudanhodou2 y-2
+            [289.5, 290.5, -98.0, -78.0, 1.0], #singoumaeteisisen3
             [284.0, 285.0, -98.0, -78.0, 1.0], #singoumae3
-            [259.5, 279.5, -83.0, -82.0, 1.0], #singoumaeteisisen4
-            [259.5, 279.5, -80.0, -79.0, 1.0], #singoumae4
+            [259.5, 279.5, -83.5, -80.5, 1.0], #singoumaeteisisen4 12
+            [259.5, 279.5, -81.0, -79.0, 1.0], #singoumae4 13
             [184.5, 186.0,  25.0,  45.0, 1.0], #dourotan3
             [107.0, 108.5,  25.0,  45.0, 1.0], #dourotan4
-            [ 74.0,  94.0, -27.0, -26.0, 1.0], #GOAL!!!!
+            [ 64.0, 104.0, -30.0, -24.0, 1.0], #GOAL!!!!
             [  999,   999,   999,   999, 0.0] ]) #
         self.stop_num = 0;
         
@@ -653,22 +656,22 @@ class PathFollower(Node):
         self.ref_theta_y = 0 #pitch /math.pi*180
         self.ref_theta_z = yaw /math.pi*180
         
-        if self.waypoint_number >= 79:
-            if self.stop_num <= 14:
-                self.stop_num = 15
-        elif self.waypoint_number >= 71:
-            if self.stop_num <= 12:
-                self.stop_num = 13
-        elif self.waypoint_number >= 62:
-            if self.stop_num <= 8:
-                self.stop_num = 9
-        elif self.waypoint_number >= 51:
+        if self.waypoint_number >= 225: # after dourotan4
+            if self.stop_num <= 15:
+                self.stop_num = 16
+        elif self.waypoint_number >= 198: # after singou
+            if self.stop_num <= 13:
+                self.stop_num = 14
+        elif self.waypoint_number >= 178: # after ekimae oudanhodou2
+            if self.stop_num <= 9:
+                self.stop_num = 10
+        elif self.waypoint_number >= 138: # after ekimae oudanhodou1
             if self.stop_num <= 7:
                 self.stop_num = 8
-        elif self.waypoint_number >= 33:
+        elif self.waypoint_number >= 81: # after singou
             if self.stop_num <= 6:
                 self.stop_num = 7
-        elif self.waypoint_number >= 25:
+        elif self.waypoint_number >= 57: # after dourotan2
             if self.stop_num <= 2:
                 self.stop_num = 3
         

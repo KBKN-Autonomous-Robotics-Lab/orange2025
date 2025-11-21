@@ -51,10 +51,10 @@ class PcdHeightSegmentation(Node):
         self.GROUND_HIGHT_MIN = -10/1000; #hight range[m] # IGVC20250601 -150 -> -10
         self.GROUND_HIGHT_MAX =  150/1000; #hight range[m]
         #set step range
-        self.STEP_HIGHT_MIN =   200/1000; #hight range[m]
+        self.STEP_HIGHT_MIN =   130/1000; #hight range[m]
         self.STEP_HIGHT_MAX =   self.OBS_HIGHT_MIN# 200/1000; #hight range[m]
         self.STEP_X_MIN     = -1500/1000; #x mask range[m]
-        self.STEP_X_MAX     =  2000/1000; #x mask range[rosbag2_2024_10_26-03_14_14_20241026_kakunin_bag1m]
+        self.STEP_X_MAX     =  1500/1000; #x mask range[rosbag2_2024_10_26-03_14_14_20241026_kakunin_bag1m]
         self.STEP_Y_MIN     = -5000/1000; #y mask range[m]
         self.STEP_Y_MAX     =  5000/1000; #y mask range[m]
         
@@ -98,7 +98,7 @@ class PcdHeightSegmentation(Node):
         pcd_step = self.height_segment(points, self.STEP_HIGHT_MIN, self.STEP_HIGHT_MAX)
         #pcd_step_height_under = self.height_segment(points, -self.STEP_HIGHT_MAX, -self.STEP_HIGHT_MIN)
         #pcd_step = np.insert(pcd_step, len(pcd_step[0,:]), pcd_step_height_under.T, axis=1)
-        #pcd_step = self.pcd_serch(pcd_step9, self.STEP_X_MIN, self.STEP_X_MAX, self.STEP_Y_MIN, self.STEP_Y_MAX)
+        pcd_step = self.pcd_serch(pcd_step, self.STEP_X_MIN, self.STEP_X_MAX, self.STEP_Y_MIN, self.STEP_Y_MAX)
         pcd_obs = np.insert(pcd_obs, len(pcd_obs[0,:]), pcd_step.T, axis=1)
         
         #publish for rviz2
