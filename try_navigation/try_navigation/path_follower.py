@@ -15,9 +15,26 @@ from my_msgs.action import StopFlag ####
 from geometry_msgs.msg import PoseStamped
 from std_msgs.msg import Int32
 from std_msgs.msg import String
+import tkinter as tk
+from threading import Thread
 
+navigation_status = "Initializing..."
 
+# GUI
+def start_gui():
+    global navigation_status
+    root = tk.Tk()
+    root.title("Navigation Status")
+    label = tk.Label(root, text=navigation_status, font=("Helvetica", 32))
+    label.pack(padx=20, pady=20)
 
+    def update_label():
+        label.config(text=navigation_status)
+        root.after(200, update_label)
+
+    update_label()
+    root.mainloop()
+    
 # C++と同じく、Node型を継承します。
 class PathFollower(Node):
     # コンストラクタです、PcdRotationクラスのインスタンスを作成する際に呼び出されます。
@@ -50,6 +67,7 @@ class PathFollower(Node):
         #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom_ref_slam', self.get_odom_ref, qos_profile_sub)
         self.subscription = self.create_subscription(nav_msgs.Odometry,'/fusion/odom', self.get_odom_ref, qos_profile_sub) #/fusion/odom
         self.subscription = self.create_subscription(sensor_msgs.PointCloud2, '/pcd_segment_obs', self.obs_steer, qos_profile)
+        self.step_sub = self.create_subscription(sensor_msgs.PointCloud2, '/pcd_segment_low_step', self.low_obs_steer, qos_profile)
         self.goal_sub = self.create_subscription(PoseStamped, '/goal_pose', self.goal_pose_callback, qos_profile)
         self.stop_sub = self.create_subscription(String, '/stop_sign_status', self.stop_sign_callback, 10)
         self.human_sub = self.create_subscription(String, '/human_status', self.human_callback, 10)
@@ -63,6 +81,7 @@ class PathFollower(Node):
         # Publisherを作成
         self.cmd_vel_publisher = self.create_publisher(geometry_msgs.Twist, 'cmd_vel', qos_profile) #set publish pcd topic name
         self.pcd_test_publisher = self.create_publisher(sensor_msgs.PointCloud2, 'pcd_test_global', qos_profile) 
+        self.pcd_jam_publisher = self.create_publisher(sensor_msgs.PointCloud2, 'pcd_jam', qos_profile) 
         #self.marker_pub = self.create_publisher(MarkerArray, 'wall_follow_markers', 10)
 
         #パラメータ init
@@ -135,30 +154,39 @@ class PathFollower(Node):
             #[-69.5,	-62,	-47.5,	-27.5, 1.0], #tyokusen4 ||| [-67.5,	-62,	-47.5,	-27.5, 1.0]before:[-67.0,	-62,	-47.5,	-27.5, 1.0], 
             #[-55,	-35,	41,	46,    1.0], #Goal
             
-            [ 10.0,  11.5, -19.0,  39.0, 1.0], #nakaniwa_test
-            [ 30.0,  31.5, -19.0,  39.0, 1.0], #nakaniwa_test
-            [ 63.0,  64.5,  19.0,  39.0, 1.0], #shiyakusyo
-            [100.5, 102.0,  25.0,  45.0, 1.0], #dourotan1
-            [178.5, 180.0,  25.0,  45.0, 1.0], #dourotan2
-            [257.5, 277.5, -60.0, -58.5, 1.0], #singoumaeteisisen1
-            [257.5, 277.5, -68.0, -66.5, 1.0], #singoumae1
-            [256.5, 276.5, -89.0, -87.5, 1.0], #singoumaeteisisen2
-            [269.5, 270.5, -99.0, -79.5, 1.0], #singoumae2
-            [405.0, 425.0, -82.5, -81.5, 1.0], #ekimae oudanhodou1 y-1
-            [555.0, 568.0, -85.0, -71.0, 0.0], #ekimae not stop
-            [405.0, 425.0, -73.0, -72.0, 1.0], #ekimae oudanhodou2 y-2
-            [289.5, 290.5, -98.0, -78.0, 1.0], #singoumaeteisisen3
-            [284.0, 285.0, -98.0, -78.0, 1.0], #singoumae3
-            [259.5, 279.5, -83.5, -80.5, 1.0], #singoumaeteisisen4 12
-            [259.5, 279.5, -81.0, -79.0, 1.0], #singoumae4 13
-            [184.5, 186.0,  25.0,  45.0, 1.0], #dourotan3
-            [107.0, 108.5,  25.0,  45.0, 1.0], #dourotan4
-            [ 64.0, 104.0, -30.0, -24.0, 1.0], #GOAL!!!!
+            #[ 10.0,  11.5, -19.0,  39.0, 1.0], #nakaniwa_test normal
+            #[ 30.0,  31.5, -19.0,  39.0, 1.0], #nakaniwa_test normal
+            #[ 10.0,  11.5, -19.0,  39.0, 1.0], #nakaniwa_test normal
+            #[ 0.0,  1.5,  30.0,  65.0, 1.0], #nakaniwa_test omawari 
+            #[ 10.0,  11.5, -19.0,  39.0, 1.0], #nakaniwa_test
+            #[ 30.0,  31.5, -19.0,  39.0, 1.0], #nakaniwa_test
+            #[ 0.0,  1.5,  30.0,  65.0, 1.0], #nakaniwa_test
+            #[ 10.0,  11.5, -19.0,  39.0, 1.0], #nakaniwa_test
+            #[ 30.0,  31.5, -19.0,  39.0, 1.0], #nakaniwa_test
+            #[ 0.0,  1.5,  30.0,  65.0, 1.0], #nakaniwa_test
+            [ 64.2,  65.2,  19.0,  39.0, 1.0], #shiyakusyo
+            [100.0, 101.0,  25.0,  45.0, 1.0], #dourotan1
+            [177.7, 178.7,  25.0,  45.0, 1.0], #dourotan2
+            [257.5, 277.5, -60.0, -59.0, 1.0], #singoumaeteisisen1
+            [257.5, 277.5, -66.5, -65.5, 1.0], #singoumae1
+            [256.5, 276.5, -86.2, -85.2, 1.0], #singoumaeteisisen2
+            [270.3, 271.3, -99.0, -79.5, 1.0], #singoumae2
+            [405.0, 425.0, -80.2, -79.2, 1.0], #ekimae oudanhodou1 y-1
+            [545.0, 568.0, -85.0, -60.0, 0.0], #ekimae not stop
+            [410.0, 417.0, -71.5, -70.5, 1.0], #ekimae oudanhodou2 y-2
+            [290.6, 291.6, -98.0, -78.0, 1.0], #singoumaeteisisen3
+            [284.3, 285.3, -98.0, -78.0, 1.0], #singoumae3
+            [259.5, 279.5, -83.7, -82.7, 1.0], #singoumaeteisisen4 12
+            [259.5, 279.5, -80.3, -79.3, 1.0], #singoumae4 13
+            [185.0, 186.0,  25.0,  45.0, 1.0], #dourotan3
+            [107.5, 108.5,  25.0,  45.0, 1.0], #dourotan4
+            [ 64.0, 104.0, -30.0, -25.0, 1.0], #GOAL!!!!
             [  999,   999,   999,   999, 0.0] ]) #
         self.stop_num = 0;
         
         #obs
         self.obs_points = np.array([[],[],[],[]])
+        self.low_step_obs_points = np.array([[],[],[],[]])
         self.rh_obs = 0
         self.lh_obs = 0
         self.ch_obs = 0
@@ -166,6 +194,14 @@ class PathFollower(Node):
 
         # angle megin for gps heading 
         self.angle_diff = 30
+        
+        # jam process
+        self.jam_timer = self.get_clock().now()
+        self.none_jam_timer = self.get_clock().now()
+        self.jam_active = False
+        self.jam_last_print = -1
+        self.c_jam_obs = 0
+        
         
         
         ################# IGVC SelfDrive Quolification line stop test #20250530# #################
@@ -211,12 +247,13 @@ class PathFollower(Node):
 
     # actionリクエストの受信時に呼ばれる(tuika)
     def listener_callback(self, goal_handle):
+        global navigation_status
         self.get_logger().info(f"Received goal with a: {goal_handle.request.a}, b: {goal_handle.request.b}")
         
         # クライアントから送られたaをstop_flagに代入
         self.stop_flag = goal_handle.request.a
         print(f"stop_flag set to: {self.stop_flag}")
-        
+        navigation_status = "GO"
         
         # フィードバックの返信
         for i in range(1):
@@ -310,11 +347,23 @@ class PathFollower(Node):
         target_rad = math.atan2(relative_point_rot[1], relative_point_rot[0])
         target_theta = (target_rad) * (180 / math.pi)
         
+        ################### Straight Waypoint ############################
+        if 191 <= self.waypoint_number <= 192:# or 0 <= self.waypoint_number <= 5:
+            target_waypoint = path[:,-1]
+            relative_point_x = target_waypoint[0] - position_x
+            relative_point_y = target_waypoint[1] - position_y
+            relative_point = np.vstack((relative_point_x, relative_point_y, target_waypoint[2]))
+            relative_point_rot, t_point_rot_matrix = rotation_xyz(relative_point, theta_x, theta_y, -theta_z)
+            #relative_point_rot, t_point_rot_matrix = rotation_xyz(relative_point, theta_x, theta_y, -reverse_theta_z)
+            target_rad = math.atan2(relative_point_rot[1], relative_point_rot[0])
+            target_theta = (target_rad) * (180 / math.pi)
+            
+        ##################################################################
         
         
         #set speed
         
-        speed_set = 0.55#55 AutoNav 1.10
+        speed_set = 0.75#55 AutoNav 1.10
         speed = speed_set
         
         ################# IGVC SelfDrive Full #20250601# #################
@@ -323,15 +372,17 @@ class PathFollower(Node):
                 speed = speed_set#0.35
         ##################################################################
         
-        points = self.obs_points 
+        #points = self.obs_points
+        points = np.concatenate([self.obs_points, self.low_step_obs_points], axis=1)
         obs_theta = np.arctan2(points[1,:],points[0,:]) * 180/math.pi #arctan2(y,x)
         obs_dist = np.sqrt(points[0,:]**2 + points[1,:]**2)
         
         r_obs = (-120<obs_theta) * (obs_theta< -60) * (obs_dist<0.9)
         l_obs = (  60<obs_theta) * (obs_theta< 120) * (obs_dist<0.9)
-        c_obs = ( -60<obs_theta) * (obs_theta<  60) * (obs_dist<1.2)
+        c_obs = ( -60<obs_theta) * (obs_theta<  60) * (obs_dist<1.2) #1.2
         c_obs_near = ( -50<obs_theta) * (obs_theta<  50) * (obs_dist<0.5)
         c_obs_back = ( -50<obs_theta) * (obs_theta<  50) * (obs_dist<0.4)
+
         
         if np.any(r_obs) and np.any(l_obs) and ~np.any(c_obs) :
             speed = 0.25
@@ -390,12 +441,57 @@ class PathFollower(Node):
         rh_obs = self.rh_obs
         lh_obs = self.lh_obs
         ch_obs = self.ch_obs
+        c_jam_obs = self.c_jam_obs
         #c_obs_near = ( -50<obs_theta) * (obs_theta<  50) * (obs_dist<0.5)
         #c_obs_back = ( -50<obs_theta) * (obs_theta<  50) * (obs_dist<0.4)
         cf = 1.15
         
         #self.get_logger().info(f"self.waypoint_number: {self.waypoint_number}")
-        print(theta_z)
+        #print(theta_z)
+        
+
+        #-----------------------jam process-----------------
+        now = self.get_clock().now()
+        if np.any(c_jam_obs):
+            if (73 <= self.waypoint_number <= 74) or (self.waypoint_number == 45) or (136 <= self.waypoint_number <= 137) or (190 <= self.waypoint_number <= 192) or (176 <= self.waypoint_number <= 176):
+                # jam条件 active でないこと none_jam_timer から 5s 経っていること）
+                if not self.jam_active:
+                    none_elapsed = (now - self.none_jam_timer).nanoseconds / 1e9
+                    print(f"none jam timer :{none_elapsed}")
+                    if none_elapsed > 4.0:
+                        self.jam_active = True
+                        self.jam_timer = now
+                        self.jam_last_print = -1
+                        print("Front obstacle detected. Timer started.")
+                        print(f"none jam timer :{none_elapsed}")
+
+                if self.jam_active:
+                    elapsed = (now - self.jam_timer).nanoseconds / 1e9  # 秒（float）
+
+                    #just showing passed time per sec
+                    sec = int(elapsed)
+                    if sec != self.jam_last_print:
+                        self.jam_last_print = sec
+                        print(f"time: {sec} sec")
+
+                    # stop before 20 sec passed
+                    if elapsed <= 50.0:
+                        speed = 0.0
+                        target_rad = 0.0
+                        return
+                    else: #20 sec passed 
+                        self.jam_active = False
+                        self.none_jam_timer = now
+                        print("ch obs persistence exceeded 20 sec -> FORCING EXIT FROM JAM PROCESS!!")
+        else:
+            # ch_obs is none   reset 
+            if self.jam_active:
+                print("Front obstacle cleared. Timer reset.")
+                self.none_jam_timer = now
+            self.jam_active = False
+
+        #---------------------------        
+        
         if ~np.any(ch_obs) :
             if np.any(lh_obs) and np.any(rh_obs) :  #真ん中　
                 target_theta = (target_rad) * (180 / math.pi)
@@ -411,15 +507,21 @@ class PathFollower(Node):
                 print("--- Center --- After target_theta[deg]:",target_theta)
                             
             #or ((0 <= self.waypoint_number <= 3) and (0 - self.angle_diff <= theta_z <= 0 + self.angle_diff)) \
+            #((25 <= self.waypoint_number <= 28) and (-60 - self.angle_diff <= theta_z <= -60 + self.angle_diff)) \
             elif ~np.any(lh_obs) and np.any(rh_obs):   #右寄り　
                 speed = 0.25
-                if (6 <= self.waypoint_number <= 8) or (self.waypoint_number==15) or (self.waypoint_number==18) \
-                or ((50 <= self.waypoint_number <= 54) and (0 - self.angle_diff <= theta_z <= 0 + self.angle_diff)) \
-                or ((70 <= self.waypoint_number <= 73) and (-150 <= theta_z <= -150 - self.angle_diff) and (150  <= theta_z <= 150 + self.angle_diff)) :
+                if (
+                    (18 <= self.waypoint_number <= 20 and ((-150 - self.angle_diff <= theta_z <= -150) or (150  <= theta_z <= 150 + self.angle_diff)))
+                    or (139 <= self.waypoint_number <= 143 and 0 - self.angle_diff <= theta_z <= 0 + self.angle_diff)
+                    or (146 <= self.waypoint_number <= 151 and 0 - self.angle_diff <= theta_z <= 0 + self.angle_diff)
+                    or (179 <= self.waypoint_number <= 188 and ((-150 - self.angle_diff <= theta_z <= -150) or (150  <= theta_z <= 150 + self.angle_diff)))
+                    or (198 <= self.waypoint_number <= 208 and 90 - self.angle_diff <= theta_z <= 90 + self.angle_diff)
+                    or (33 <= self.waypoint_number <= 35 and -20 - self.angle_diff <= theta_z <= -20 + self.angle_diff)
+                ): #1 3 5 6 7 8
                     target_theta = (target_rad) * (180 / math.pi)
                     print("!!!RH!!!! Befor target_theta[deg]:",target_theta)
                     rh_obs_close = max(rh_obs[1,:]) # y0 rh min
-                    rh_dist = 0.65
+                    rh_dist = 0.65 # 0.65
                     cy = cf
                     cx = rh_obs_close + rh_dist
                     target_rad = math.atan2(cx, cf)
@@ -428,12 +530,15 @@ class PathFollower(Node):
                     
             elif np.any(lh_obs) and ~np.any(rh_obs):  #左寄り 11 <= self.waypoint_number <= 12 \ 
                 speed = 0.25
-                if ((25 <= self.waypoint_number <= 28) and (-90 - self.angle_diff <= theta_z <= -90 + self.angle_diff)) \
-                or ((56 <= self.waypoint_number <= 60) and (-150 <= theta_z <= -150 - self.angle_diff) and (150  <= theta_z <= 150 + self.angle_diff)) :
+                if (
+                    (65 <= self.waypoint_number <= 72 and -90 - self.angle_diff <= theta_z <= -90 + self.angle_diff)
+                    or (162 <= self.waypoint_number <= 168 and ((-150 - self.angle_diff <= theta_z <= -150) or (150  <= theta_z <= 150 + self.angle_diff)))
+                    or (172 <= self.waypoint_number <= 175 and ((-150 - self.angle_diff <= theta_z <= -150) or (150  <= theta_z <= 150 + self.angle_diff)))
+                    ):    #2 4
                     target_theta = (target_rad) * (180 / math.pi)
                     print("!!!LH!!!! Befor target_theta[deg]:",target_theta)
                     lh_obs_close = min(lh_obs[1,:]) # y0 lh min
-                    lh_dist = 0.65
+                    lh_dist = -0.65 # 0.65
                     cy = cf
                     cx = lh_obs_close + lh_dist
                     target_rad = math.atan2(cx, cf)
@@ -577,6 +682,7 @@ class PathFollower(Node):
         #################################################################################
         
         
+        
         #elif abs(target_theta)  > 90:
         #    speed = 0.2
         #else:
@@ -641,6 +747,7 @@ class PathFollower(Node):
         return steering
     
     def get_odom_ref(self, msg):
+        global navigation_status
         self.ref_position_x = msg.pose.pose.position.x
         self.ref_position_y = msg.pose.pose.position.y
         self.ref_position_z = msg.pose.pose.position.z
@@ -679,6 +786,7 @@ class PathFollower(Node):
             if self.stop_xy[self.stop_num,4] > 0:
                 self.get_logger().info('####### stop flag on %f #######' % (self.stop_num))
                 self.stop_flag = 1;
+                navigation_status = "STOP"
                 #print(self.stop_num)
             else:
                 self.get_logger().info('####### through flag on %f #######' % (self.stop_num))
@@ -723,10 +831,13 @@ class PathFollower(Node):
             self.lh_obs = 0
         
         ch_obs = self.pcd_serch(points, 1.0,1.3,-0.4,0.4)
+
+        c_jam_obs = self.pcd_serch(points, 0.0,2.0,-0.6,0.6,0.6,1.0) #1.0,1.3,-0.4,0.4 #1.0,2.0,-0.8,0.8
             
         self.rh_obs = rh_obs
         self.lh_obs = lh_obs
         self.ch_obs = ch_obs
+        self.c_jam_obs = c_jam_obs
         
         #print(lh_obs.shape)
         #print("x0 min",min(lh_obs[0,:]))
@@ -737,8 +848,38 @@ class PathFollower(Node):
         #print("y0 rh min",max(rh_obs[1,:]))
         
         #global test obs rviz2 kesu
+        obs_jam_msg = point_cloud_intensity_msg(c_jam_obs.T, t_stamp, 'odom')
         obs_test_msg = point_cloud_intensity_msg(ch_obs.T, t_stamp, 'odom')
         self.pcd_test_publisher.publish(obs_test_msg) 
+        self.pcd_test_publisher.publish(obs_jam_msg)
+    
+    def low_obs_steer(self, msg):
+        
+        #print stamp message
+        #t_stamp = msg.header.stamp
+        #print(f"t_stamp ={t_stamp}")
+        #self.t_stamp = t_stamp
+        
+        #get pcd data
+        points = self.pointcloud2_to_array(msg)
+        #print(f"points ={points.shape}")
+        
+        #map_obs
+        if (
+            (self.waypoint_number == 45)
+            or (self.waypoint_number == 137)
+            or (self.waypoint_number == 177)
+            or (76 <= self.waypoint_number <= 78)
+            or (148 <= self.waypoint_number <= 153)
+            or (162 <= self.waypoint_number <= 167)
+            or (195 <= self.waypoint_number <= 198)
+            or (227 <= self.waypoint_number <= 232)
+        ): # nakaniwa 14~20
+            self.low_step_obs_points = points
+            #self.get_logger().info(f"#######Add Low Step#######: {self.low_step_obs_points}")
+        else:
+            self.low_step_obs_points = np.array([[],[],[],[]])
+            #self.get_logger().info(f"#######No Low Step#######: {self.low_step_obs_points}")
 
     # pcd_serch を z も考慮する形で置換（点群抽出用ユーティリティ）
     def pcd_serch(self, pointcloud, x_min, x_max, y_min, y_max, z_min=None, z_max=None):
@@ -828,6 +969,9 @@ def main(args=None):
     rclpy.init(args=args)
     # クラスのインスタンスを作成
     path_follower = PathFollower()
+    # GUI
+    gui_thread = Thread(target=start_gui, daemon=True)
+    gui_thread.start()
     # spin処理を実行、spinをしていないとROS 2のノードはデータを入出力することが出来ません。
     rclpy.spin(path_follower)
     # 明示的にノードの終了処理を行います。

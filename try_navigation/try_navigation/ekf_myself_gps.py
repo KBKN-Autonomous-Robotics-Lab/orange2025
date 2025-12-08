@@ -52,7 +52,7 @@ class ExtendedKalmanFilter(Node):
         self.RR_count_bad = 0
         self.RR_count_so = 0
         self.kalf_speed_param = 1.05
-        self.kalf_speed_param_noGPS = 1.03
+        self.kalf_speed_param_noGPS = 1.00
         self.gps_rr_flag = 1
         self.offsetyaw_bad_gps = 0
 
@@ -176,11 +176,15 @@ class ExtendedKalmanFilter(Node):
     def determination_of_R(self):
         if self.GpsXY is not None:
             #カルマンフィルタのデッドレコニングよりになる範囲を指定
-            if ((-60<self.GpsXY[0]) and (self.GpsXY[0]<60) and (25 < self.GpsXY[1]) and (self.GpsXY[1]<110)) or ((476<self.GpsXY[0]) and (self.GpsXY[0]<600) and (-84 < self.GpsXY[1]) and (self.GpsXY[1]<-25)) or ((-41<self.GpsXY[0]) and (self.GpsXY[0]<-7) and (-52 < self.GpsXY[1]) and (self.GpsXY[1]<71)): # last is for nakaniwa test
+            if ((-60<self.GpsXY[0]) and (self.GpsXY[0]<60) and (35 < self.GpsXY[1]) and (self.GpsXY[1]<110)) or ((539<self.GpsXY[0]) and (self.GpsXY[0]<600) and (-84 < self.GpsXY[1]) and (self.GpsXY[1]<-25)) or ((260<self.GpsXY[0]) and (self.GpsXY[0]<275) and (-66 < self.GpsXY[1]) and (self.GpsXY[1]<-40)): # last is for nakaniwa test or ((-41<self.GpsXY[0]) and (self.GpsXY[0]<-7) and (-52 < self.GpsXY[1]) and (self.GpsXY[1]<71)) eki x 476<self.GpsXY[0]) and (self.GpsXY[0]<600
                 #self.gps_rr_flag = 1
                 self.gps_rr_flag = 0 #self.gps_rr_flag =1はGPS受信精度よく、0でGPS受信精度低い範囲に入ったフラグ
                 #self.offsetyaw_bad_gps = -10/180*math.pi
                 self.GPS_angle_conut = 0; ## tukuba 20250920 zantei
+                if ((476<self.GpsXY[0]) and (self.GpsXY[0]<600) and (-84 < self.GpsXY[1]) and (self.GpsXY[1]<-25)):
+                   self.kalf_speed_param_noGPS = 1.00
+                else:
+                   self.kalf_speed_param_noGPS = 1.00
             else:
                 self.gps_rr_flag = 1
                 self.offsetyaw_bad_gps = 0

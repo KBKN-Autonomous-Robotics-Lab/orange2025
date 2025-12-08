@@ -59,6 +59,7 @@ setup(
             'ekf_myself_gps = try_navigation.ekf_myself_gps:main',
             'ekf_myself_odom = try_navigation.ekf_myself_odom:main',
             'map_check = try_navigation.map_check:main',
+            'marker_utils = try_navigation.marker_utils:main',
             'pcd_buffer = try_navigation.pcd_buffer:main'
 
         ],

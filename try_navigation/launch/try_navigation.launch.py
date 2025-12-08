@@ -32,10 +32,11 @@ def generate_launch_description():
     waypoint_path = LaunchConfiguration('waypoint_path')
     declare_waypoint_arg = DeclareLaunchArgument(
         'waypoint_path',
-        default_value='kbkn_maps/waypoints/hosei/2025/nakaniwa_tsukuba.yaml',
+        default_value='kbkn_maps/waypoints/tsukuba/2025/papa/tsukuba_waypoint.yaml',
         description='waypoint name'
     )
-    
+    #kbkn_maps/waypoints/tsukuba/2025/papa/tsukuba_waypoint.yaml
+    #kbkn_maps/waypoints/hosei/2025/nakaniwa.yaml
     waypoint_start_index = LaunchConfiguration('waypoint_start_index')
     declare_waypoint_start_arg = DeclareLaunchArgument(
         'waypoint_start_index',
@@ -89,6 +90,15 @@ def generate_launch_description():
             output='screen',
             arguments=[]
         ),
+        
+        #pcd segmentation
+        Node(package='pcd_convert',
+            executable='pcd_reflect_segmentation',
+            name='pcd_reflect_segmentation_node',
+            output='screen',
+            arguments=[]
+        ),
+        
         #odom wheel
         #Node(package='try_navigation',
         #    executable='odom_wheel',
