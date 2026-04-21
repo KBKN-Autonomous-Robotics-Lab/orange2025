@@ -48,8 +48,8 @@ class PcdHeightSegmentation(Node):
         self.OBS_MASK_Y_MIN = -350/1000; #y mask range[m]
         self.OBS_MASK_Y_MAX =  350/1000; #y mask range[m]
         #set ground range
-        self.GROUND_HIGHT_MIN = -10/1000; #hight range[m] # IGVC20250601 -150 -> -10
-        self.GROUND_HIGHT_MAX =  150/1000; #hight range[m]
+        self.GROUND_HIGHT_MIN = -100/1000; #hight range[m] # IGVC20250601 -150 -> -10 -100
+        self.GROUND_HIGHT_MAX =  150/1000; #hight range[m] #150
         #set step range
         self.STEP_HIGHT_MIN =   550/1000; #hight range[m]
         self.STEP_HIGHT_MAX =   self.OBS_HIGHT_MIN# 200/1000; #hight range[m]

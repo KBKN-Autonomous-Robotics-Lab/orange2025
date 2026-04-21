@@ -78,6 +78,9 @@ class whitelineDetection(Node):
         self.dbscan_min_samples = 10 #min points for cluster
         self.boundary_min_points = 100 #
         
+        self.save_csv = True 
+        self.csv_frame_count = 0
+        
     def get_odom(self, msg):
         self.position_x = msg.pose.pose.position.x
         self.position_y = msg.pose.pose.position.y
