@@ -60,6 +60,7 @@ setup(
             'ekf_myself_odom = try_navigation.ekf_myself_odom:main',
             'map_check = try_navigation.map_check:main',
             'white_line_detection = try_navigation.white_line_detection:main',
+            'intensity_filter_node = try_navigation.intensity_filter_node:main',
             
         ],
     },
