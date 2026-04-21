@@ -64,6 +64,7 @@ class whitelineDetection(Node):
 
         #mid360 buff
         self.pcd_ground_buff = np.array([[],[],[],[]]);
+        self.csv_saved_local = False
         self.frame_buffer = []
         self.max_frames = 15
         
@@ -71,7 +72,7 @@ class whitelineDetection(Node):
         self.ground_pixel = 1000/50 #obstacle grid set
         self.map_lim = 20.0  #[m]auto nav 7m  selfdrive:12
     
-        self.intensity_threshold = 50 # intensity set
+        self.intensity_threshold = 25 # intensity set
 
         #dbscan parameter
         self.dbscan_eps = 0.3 #[m]
@@ -133,6 +134,22 @@ class whitelineDetection(Node):
         
         #get pcd data
         points = self.pointcloud2_to_array(msg)
+
+        # -------- CSV-A保存（1フレームだけ・ローカル座標） --------
+        if not self.csv_saved_local:
+            np.savetxt(
+                '/home/ubuntu/ros2_ws/csv/local_frame.csv',
+                points.T,
+                delimiter=',',
+                header='x,y,z,intensity',
+                comments='',
+                fmt='%.6f'
+            )
+            self.csv_saved_local = True
+            self.get_logger().info(
+                f'CSV-A保存完了: /home/ubuntu/ros2_ws/csv/local_frame.csv ({points.shape[1]} points)'
+            )
+        # ---------------------------------------------------------
 
         #position set
         position_x = self.position_x; position_y = self.position_y; position_z = self.position_z;

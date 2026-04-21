@@ -22,12 +22,12 @@ def generate_launch_description():
             name='pcd_height_segmentation',
             output='screen',
         ),
-        Node(
-            package='try_navigation',
-            executable='white_line_detection',
-            name='white_line_detection',
-            output='screen',
-        ),
+        #Node(
+            #package='try_navigation',
+            #executable='white_line_detection',
+         #   name='white_line_detection',
+          #  output='screen',
+        #),
         ExecuteProcess(
             cmd=['rviz2'],
             output='screen',
