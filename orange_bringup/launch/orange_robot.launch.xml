@@ -58,13 +58,42 @@
     <param name="odom_child_frame" value="base_footprint"/>
   </node>
   <!-- estop  -->
-  <node pkg="estop_ros" exec="cmd_vel_override_node" output="screen">
+  <!--<node pkg="estop_ros" exec="cmd_vel_override_node" output="screen">
     <param name="port" value="/dev/sensors/estop"/>
     <param name="baudrate" value="115200"/>
     <param name="time_out" value="500"/>
     <param name="serial_interval" value="0.01"/>
     <remap from="/estop/state" to="/estop"/>
+  </node>-->
+
+  <!-- spresense imu -->
+  <node pkg="cxd5602pwbimu" exec="cxd5602pwbimu_node">
+    <param name="port" value="/dev/sensors/spresense_imu"/>
+    <param name="frame_id" value="imu_link"/>
+    <param name="imu_topic" value="/imu/spresense"/>
+    <param name="time_out" value="10.0"/>
+    <param name="baudrate" value="460800"/>
+    <param name="gyro_bias_correction" value="true"/>
+    <param name="gyro_bias_samples" value="4800"/>
   </node>
+  <!-- madgwick filter node -->
+  <node pkg="imu_filter_madgwick" exec="imu_filter_madgwick_node" name="madgwick_filter">
+    <param from="$(find-pkg-share cxd5602pwbimu)/config/madgwick.yaml"/>
+    <remap from="/imu/data_raw" to="/imu/spresense"/>
+    <remap from="/imu/data" to="/imu/spresense/madgwick"/>
+  </node>
+  <!-- initial_yaw_corrector -->
+  <node pkg="cxd5602pwbimu" exec="initial_yaw_corrector" name="spimu_yaw_corrector">
+    <param name="input_topic" value="/imu/spresense/madgwick"/>
+    <param name="output_topic" value="/imu/spresense/inityaw"/>
+  </node>
+  <!-- wheel_imu_odom for spresense imu -->
+  <node pkg="cxd5602pwbimu" exec="wheel_spimu_odom">
+    <param name="odom_topic" value="/odom"/>
+    <param name="imu_topic" value="/imu/spresense/inityaw"/>
+    <param name="publish_TF" value="false"/>
+  </node>
+
   <!-- imu  -->
   <include file="$(find-pkg-share icm_20948)/launch/run.launch.xml">
     <arg name="port" value="/dev/sensors/imu"/>
@@ -81,14 +110,18 @@
     <arg name="fusion_odom_out" value="$(var fusion_odom_topic)"/>
   </include>-->
   <!-- GPSposition_publisher -->
-  <!-- initial heading:housei nakaniwa=179.169287 tsukuba= 276.5 -->
   <!-- GPSheading_publisher -->
-  <node pkg="orange_gnss" exec="gnss_odom_publisher_ttyUSB" output="screen">
+  <!-- initial heading:housei nakaniwa=179.169287 tsukuba= 93.0 -->
+  <!-- initial start_lat:housei nakaniwa=35.425952230280004 tsukuba right=36.04974095972727 tsukuba_left=36.04976195993636 -->
+  <!-- initial start_lon:housei nakaniwa=139.31380123427 tsukuba right=140.04593633886364 tsukuba_left=140.04593755179093 -->
+  <node pkg="orange_gnss" exec="gnss_odom_movingbase_fix_publisher_ttyUSB" output="screen">
     <param name="port" value="/dev/sensors/GNSS_UM982"/>
     <param name="baud" value="115200"/>
     <param name="country_id" value="0"/>
     <param name="Position_magnification" value="1.675"/>
-    <param name="heading" value="0.0"/>
+    <param name="heading" value="93.0"/>
+    <param name="start_lat" value="36.04974095972727"/>
+    <param name="start_lon" value="140.04593633886364"/>
     <param name="time_out" value="1.0"/>
   </node>
   <!-- 
@@ -169,11 +202,11 @@
     <arg name="laserscan_topics" value="$(var hokuyo_scan_topic) $(var livox_scan_topic)"/>
   </include>-->
   <!-- led_node -->
-  <node pkg="orange_sensor_tools" exec="led_node">
+  <!--<node pkg="orange_sensor_tools" exec="led_node">
     <param name="use_sim_time" value="$(var use_sim_time)"/>
     <param name="serial_port" value="/dev/sensors/LED"/>
     <param name="baud_rate" value="115200"/>
     <param name="nav_topic" value="$(var nav_topic)"/>
     <param name="estop_topic" value="$(var estop_topic)"/>
-  </node>
+  </node>-->
 </launch>

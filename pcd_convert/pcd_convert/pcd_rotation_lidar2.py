@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 # rclpy (ROS 2のpythonクライアント)の機能を使えるようにします。
 import rclpy
 # rclpy (ROS 2のpythonクライアント)の機能のうちNodeを簡単に使えるようにします。こう書いていない場合、Nodeではなくrclpy.node.Nodeと書く必要があります。
@@ -15,7 +18,7 @@ class PcdRotation(Node):
     # コンストラクタです、PcdRotationクラスのインスタンスを作成する際に呼び出されます。
     def __init__(self):
         # 継承元のクラスを初期化します。
-        super().__init__('pcd_rotation_node')
+        super().__init__('pcd_rotation_lidar2_node')
         
         qos_profile = QoSProfile(
             history=QoSHistoryPolicy.KEEP_LAST,
@@ -31,21 +34,21 @@ class PcdRotation(Node):
             depth = 10
         )
         
-        # Subscriptionを作成。
-        self.subscription = self.create_subscription(sensor_msgs.PointCloud2, '/converted_pointcloud2', self.pcd_rotation, qos_profile_sub) #set subscribe pcd topic name
+        # Subscriptionを作成。 <-- ここを最小限変更して /livox/lidar2 を購読するようにしました
+        self.subscription = self.create_subscription(sensor_msgs.PointCloud2, '/converted_pointcloud2_lidar2', self.pcd_rotation, qos_profile_sub) #set subscribe pcd topic name
         self.subscription  # 警告を回避するために設置されているだけです。削除しても挙動はかわりません。
         
         # Publisherを作成
-        self.pcd_rotation_publisher = self.create_publisher(sensor_msgs.PointCloud2, 'pcd_rotation', qos_profile) #set publish pcd topic name
+        self.pcd_rotation_publisher = self.create_publisher(sensor_msgs.PointCloud2, 'pcd_rotation_lidar2', qos_profile) #set publish pcd topic name
         
         #パラメータ
         #set LiDAR position
-        self.MID360_HIGHT = 950.8/1000; #hight position[m] 0.9508604675798957
+        self.MID360_HIGHT = 750/1000; #self.MID360_HIGHT =1.7483812830163088
             
         #上下反転  LiDAR init
-        self.THETA_INIT_X = 180.5 #[deg]
-        self.THETA_INIT_Y = 2.663 #[deg] 2.663001576990896
-        self.THETA_INIT_Z = 0 #[deg]
+        self.THETA_INIT_X = 0 #[deg]-180
+        self.THETA_INIT_Y = 0.05435636478316808 #self.THETA_INIT_Y =0.05435636478316808#[deg]
+        self.THETA_INIT_Z = 0 #[deg]  
         
         #initialize calibration
         self.initialize_calibration = 1
@@ -102,7 +105,7 @@ class PcdRotation(Node):
                 x2_max = self.x2_init_point + self.x_range;
                 y_min = self.y_init_point  - self.y_range;
                 y_max = self.y_init_point  + self.y_range;
-                print(f"x1_min,x1_max,x2_min,x2_max,y_min,y_max ={ x1_min, x1_max, x2_min, x2_max, y_min, y_max}")
+                #print(f"x1_min,x1_max,x2_min,x2_max,y_min,y_max ={ x1_min, x1_max, x2_min, x2_max, y_min, y_max}")
                 pcd_x1_ind = self.pcd_serch(self.pcd_buff, x1_min, x1_max, y_min, y_max)
                 pcd_x2_ind = self.pcd_serch(self.pcd_buff, x2_min, x2_max, y_min, y_max)
                 #print(f"len(self.pcd_buff[0,pcd_x1_ind]), {len(self.pcd_buff[0,pcd_x1_ind])}")
@@ -226,4 +229,5 @@ def main(args=None):
 if __name__ == '__main__':
     # 関数`main`を実行する。
     main()
+
 

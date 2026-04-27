@@ -16,24 +16,29 @@ class GPSData(Node):
     def __init__(self):
         super().__init__('gps_data_acquisition')
 
-        # Parameters
         self.declare_parameter('port', '/dev/sensors/GNSS_UM982')
         self.declare_parameter('baud', 115200)
         self.declare_parameter('country_id', 0)
         self.declare_parameter('Position_magnification', 1.675)
         self.declare_parameter('heading', 90.0)
+        self.declare_parameter('start_lat', 35.425952230280004) # tsukuba start point right 36.04974095972727, 140.04593633886364 , left 36.04976195993636, 140.04593755179093/nakaniwa 35.4257898377487,139.313807281254 /35.425952230280004, 139.31380123427
+        self.declare_parameter('start_lon', 139.31380123427)
 
         self.dev_name = self.get_parameter('port').get_parameter_value().string_value
         self.serial_baud = self.get_parameter('baud').get_parameter_value().integer_value
         self.country_id = self.get_parameter('country_id').get_parameter_value().integer_value
         self.Position_magnification = self.get_parameter('Position_magnification').get_parameter_value().double_value
-        self.theta = self.get_parameter('heading').get_parameter_value().double_value
-        
-        #self.theta = 275.6 # tukuba param
-        #self.theta = 180 #nakaniwa param
+        #self.theta = self.get_parameter('heading').get_parameter_value().double_value
+        self.tsukuba_theta= self.get_parameter('heading').get_parameter_value().double_value # nakaniwa 180 tsukuba 93
+        self.theta = self.tsukuba_theta
+
         self.initial_coordinate = None
+        self.start_lat = self.get_parameter('start_lat').get_parameter_value().double_value
+        self.start_lon = self.get_parameter('start_lon').get_parameter_value().double_value
+        self.start_GPS_coordinate = [self.start_lat, self.start_lon]
         self.fix_data = None
         self.count = 0
+        
         self.initialized = False  # 平均初期座標が取得できたかどうか
 
         # Publishers
@@ -46,9 +51,12 @@ class GPSData(Node):
         
         # service client
         self.client = self.create_client(Avglatlon, 'send_avg_gps')
-        while not self.client.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info("service not available...")
+        #while not self.client.wait_for_service(timeout_sec=1.0):
+        #    self.get_logger().info("service not available...")
 
+        self.get_logger().info("Start get_lonlat quat node")
+        self.get_logger().info("-------------------------")
+        
         # Timers
         self.timer = self.create_timer(1.0, self.timer_callback)
 
@@ -62,7 +70,7 @@ class GPSData(Node):
         # tkinter GUI setup
         self.root = tk.Tk()
         self.root.title("GPS Data Acquisition")
-        self.start_button = tk.Button(self.root, text="Start", command=self.start_gps_acquisition, width=20, height = 5)
+        self.start_button = tk.Button(self.root, text="Start GPS Acquisition", command=self.start_gps_acquisition, width=20, height = 5)
         self.start_button.pack()
 
         self.gps_acquisition_thread = None
@@ -73,7 +81,11 @@ class GPSData(Node):
         request = Avglatlon.Request()
         request.avg_lat = self.initial_coordinate[0]  # ← average lat
         request.avg_lon = self.initial_coordinate[1]  # ← average lon
-        request.theta = self.theta
+        request.current_lat = self.current_coordinate[0]  # ← currennt lat
+        request.current_lon = self.current_coordinate[1]  # ← currennt lon
+        #request.theta = self.theta
+        request.theta = self.tsukuba_theta # tsukuba start theta
+        request.current_theta = self.theta # for tsukuba
 
         future = self.client.call_async(request)
         future.add_done_callback(self.response_callback)
@@ -96,7 +108,7 @@ class GPSData(Node):
         self.gps_data_cache = self.get_gps_quat(self.dev_name, self.country_id)
 
         if self.gps_data_cache:
-            fix_type, lat, lon, alt, _, heading = self.gps_data_cache
+            fix_type, lat, lon, alt, satelitecount_data, heading = self.gps_data_cache
             if fix_type != 0:
                 self.publish_fix(self.gps_data_cache)
                 self.publish_odom(lat, lon, alt)
@@ -124,13 +136,19 @@ class GPSData(Node):
             if GPS_data and GPS_data[1] != 0 and GPS_data[2] != 0:
                 lat_sum += GPS_data[1]
                 lon_sum += GPS_data[2]
+                #heading_sum += float(GPS_data[5])
                 count += 1
             time.sleep(0.1)  # Slight delay to avoid overwhelming the GPS device
 
         if count > 0:
-            self.initial_coordinate = [lat_sum / count, lon_sum / count]
+            #self.initial_coordinate = [lat_sum / count, lon_sum / count] # calculate average
+            self.initial_coordinate = self.start_GPS_coordinate
+            self.current_coordinate = [lat_sum / count, lon_sum / count] # for tsukuba
+            #self.theta = (heading_sum / count) - 90
             self.initialized = True
             self.get_logger().info(f"Initial coordinate set to: {self.initial_coordinate}")
+            self.get_logger().info(f"current coordinate set to: {self.current_coordinate}")
+            self.get_logger().info(f"Initial theta set to: {self.tsukuba_theta}")
             self.send_request()
         self.is_acquiring = False
 
@@ -250,7 +268,7 @@ class GPSData(Node):
 
     def heading_to_quat(self ,real_heading):
 
-        robotheading = real_heading + 90
+        robotheading = real_heading - 90
         if robotheading >= 360:
             robotheading -= 360
 
@@ -259,7 +277,8 @@ class GPSData(Node):
 
         if self.count == 0:
             self.get_logger().info(f"!!!----------robotheading: {robotheading} deg----------!!!")
-            self.first_heading = robotheading
+            #self.first_heading = robotheading
+            self.first_heading = self.tsukuba_theta
             self.count = 1
 
         relative_heading = robotheading - self.first_heading
@@ -358,6 +377,8 @@ class GPSData(Node):
         self.lonlat_msg.latitude = gps[1]
         self.lonlat_msg.longitude = gps[2]
         self.lonlat_msg.altitude = gps[3]
+        
+        self.lonlat_msg.status.service = gps[4] # satelitecount
 
         self.lonlat_pub.publish(self.lonlat_msg)
             # self.get_logger().info(f"Published GPS data: {lonlat}")
@@ -366,13 +387,13 @@ class GPSData(Node):
     
     def publish_movingbase(self, heading):
         if heading is not None and heading != 0.0:
-            robotheading = heading + 90.0
+            robotheading = heading - 90.0
             if robotheading >= 360.0:
                 robotheading -= 360.0
 
             if self.count == 0:
                 self.get_logger().info(f"!!!----------robotheading: {robotheading} deg----------!!!")
-                self.first_heading = robotheading
+                self.first_heading = self.tsukuba_theta
                 self.count = 1
 
             relative_heading = robotheading - self.first_heading
@@ -409,8 +430,7 @@ class GPSData(Node):
             self.get_logger().error("!!!!-not movingbase data-!!!!")
 
             
-    def publish_odom(self, lat, lon, alt):
-        
+    def publish_odom(self, lat, lon, alt):        
         #GPS_data = self.get_gps_quat(self.dev_name, self.country_id)
         #gnggadata = (Fixtype_data,latitude_data,longitude_data,altitude_data,satelitecount_data,heading)
         #if GPS_data and GPS_data[1] != 0 and GPS_data[2] != 0:
@@ -419,9 +439,9 @@ class GPSData(Node):
             self.satelite = GPS_data[4]
             lonlat = [GPS_data[1], GPS_data[2]]
             
-            if self.initial_coordinate is None:
-                self.initial_coordinate = [GPS_data[1], GPS_data[2]]        
-            GPSxy = self.conversion(lonlat, self.initial_coordinate, self.theta)
+            #if self.initial_coordinate is None:
+            #    self.initial_coordinate = [GPS_data[1], GPS_data[2]]        
+            GPSxy = self.conversion(lonlat, self.start_GPS_coordinate, self.tsukuba_theta)
             GPSquat = self.heading_to_quat(GPS_data[5])       
 
             self.odom_msg.header.stamp = self.get_clock().now().to_msg()

@@ -45,7 +45,9 @@ setup(
     entry_points={
         'console_scripts': [
             'pcd_rotation = pcd_convert.pcd_rotation:main',
-            'pcd_height_segmentation = pcd_convert.pcd_height_segmentation:main'
+            'pcd_height_segmentation = pcd_convert.pcd_height_segmentation:main',
+            'pcd_reflect_segmentation = pcd_convert.pcd_reflect_segmentation:main',
+            'pcd_rotation_lidar2 = pcd_convert.pcd_rotation_lidar2:main'
         ],
     },
 )
