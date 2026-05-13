@@ -39,7 +39,7 @@ class PcdRotation(Node):
         self.subscription  # 警告を回避するために設置されているだけです。削除しても挙動はかわりません。
         
         # Publisherを作成
-        self.pcd_rotation_publisher = self.create_publisher(sensor_msgs.PointCloud2, 'pcd_rotation_lidar2', qos_profile) #set publish pcd topic name
+        self.pcd_rotation_publisher = self.create_publisher(sensor_msgs.PointCloud2, 'pcd_rotation2', qos_profile) #set publish pcd topic name
         
         #パラメータ
         #set LiDAR position
