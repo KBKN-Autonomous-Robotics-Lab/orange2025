@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
 # rclpy (ROS 2のpythonクライアント)の機能を使えるようにします。
 import rclpy
 # rclpy (ROS 2のpythonクライアント)の機能のうちNodeを簡単に使えるようにします。こう書いていない場合、Nodeではなくrclpy.node.Nodeと書く必要があります。
@@ -14,11 +11,11 @@ import time
 
 
 # C++と同じく、Node型を継承します。
-class PcdRotation(Node):
-    # コンストラクタです、PcdRotationクラスのインスタンスを作成する際に呼び出されます。
+class PcdHeightSegmentation(Node):
+    # コンストラクタです、PcdHeightSegmentationクラスのインスタンスを作成する際に呼び出されます。
     def __init__(self):
         # 継承元のクラスを初期化します。
-        super().__init__('pcd_rotation_lidar2_node')
+        super().__init__('pcd_heigth_segmentation_node')
         
         qos_profile = QoSProfile(
             history=QoSHistoryPolicy.KEEP_LAST,
@@ -28,38 +25,27 @@ class PcdRotation(Node):
         )
         
         qos_profile_sub = QoSProfile(
-            history=QoSHistoryPolicy.KEEP_LAST,
             reliability=QoSReliabilityPolicy.RELIABLE,
             durability=QoSDurabilityPolicy.VOLATILE,
-            depth = 10
+            depth = 1
         )
         
-        # Subscriptionを作成。 <-- ここを最小限変更して /livox/lidar2 を購読するようにしました
-        self.subscription = self.create_subscription(sensor_msgs.PointCloud2, '/converted_pointcloud2_lidar2', self.pcd_rotation, qos_profile_sub) #set subscribe pcd topic name
+        # Subscriptionを作成。
+        self.subscription = self.create_subscription(sensor_msgs.PointCloud2, '/pcd_rotation2', self.pcd_heigth_segmentation, qos_profile) #set subscribe pcd topic name
         self.subscription  # 警告を回避するために設置されているだけです。削除しても挙動はかわりません。
         
         # Publisherを作成
-        self.pcd_rotation_publisher = self.create_publisher(sensor_msgs.PointCloud2, 'pcd_rotation2', qos_profile) #set publish pcd topic name
-        
+        self.pcd_segment_sky_publisher = self.create_publisher(sensor_msgs.PointCloud2, 'pcd_segment_sky', qos_profile) #set publish pcd topic name
+       
         #パラメータ
-        #set LiDAR position
-        self.MID360_HIGHT = 750/1000; #self.MID360_HIGHT =1.7483812830163088
-            
-        #上下反転  LiDAR init
-        self.THETA_INIT_X = 0 #[deg]-180
-        self.THETA_INIT_Y = 0.05435636478316808 #self.THETA_INIT_Y =0.05435636478316808#[deg]
-        self.THETA_INIT_Z = 0 #[deg]  
-        
-        #initialize calibration
-        self.initialize_calibration = 1
-        self.pcd_buff = np.array([[],[],[],[]]);
-        self.x1_init_point = 1.5
-        self.x2_init_point = 2.5
-        self.y_init_point = 0.0
-        self.x_range = 0.1
-        self.y_range = 0.3
-        
-        
+        #set sky range
+        self.SKY_HIGHT_MIN =   200/1000; #hight range[m]
+        self.SKY_HIGHT_MAX =  4000/1000; #hight range[m]
+        self.SKY_MASK_X_MIN = -550/1000; #x mask range[m]
+        self.SKY_MASK_X_MAX =  400/1000; #x mask range[m]
+        self.SKY_MASK_Y_MIN = -350/1000; #y mask range[m]
+        self.SKY_MASK_Y_MAX =  350/1000; #y mask range[m]
+
         
     def pointcloud2_to_array(self, cloud_msg):
         # Extract point cloud data
@@ -71,111 +57,47 @@ class PcdRotation(Node):
 
         # Combine into a 4xN matrix
         point_cloud_matrix = np.vstack((x, y, z, intensity))
-        #print(point_cloud_matrix)
-        #print(f"point_cloud_matrix ={point_cloud_matrix.shape}")
-        #print(f"x ={x.dtype, x.shape}")
+        print(point_cloud_matrix)
+        print(f"point_cloud_matrix ={point_cloud_matrix.shape}")
+        print(f"x ={x.dtype, x.shape}")
         
         return point_cloud_matrix
         
-    def pcd_rotation(self, msg):
+    def pcd_heigth_segmentation(self, msg):
         
         #print stamp message
         t_stamp = msg.header.stamp
-        #print(f"t_stamp ={t_stamp}")
+        print(f"t_stamp ={t_stamp}")
         
         #get pcd data
         points = self.pointcloud2_to_array(msg)
-        #print(f"points ={points.shape}")
-        #for pcd rotation
-        xyz_point = np.vstack([points[0,:],points[1,:],points[2,:]])
-        #print(f"xyz_point ={xyz_point.shape}")
-        pointcloud, rot_matrix = rotation_xyz(xyz_point, self.THETA_INIT_X, self.THETA_INIT_Y, self.THETA_INIT_Z)
-        #add intensity
-        pointcloud_intensity = np.insert(pointcloud, 3, points[3,:], axis=0)
+        print(f"points ={points.shape}")
         
-        if self.initialize_calibration == 0:
-            pcd_buff_len = 3* 2*10*4
-            self.pcd_buff = np.insert(self.pcd_buff, len(self.pcd_buff[0,:]), pointcloud_intensity.T, axis=1)
-            print(f"len(self.pcd_buff), {self.pcd_buff.shape}")
-            if (len(self.pcd_buff[0,:]) > pcd_buff_len):
-                #self.pcd_buff = self.pcd_buff[:,(len(self.pcd_buff[0,:])-pcd_buff_len):len(self.pcd_buff[0,:])]
-                x1_min = self.x1_init_point - self.x_range;
-                x1_max = self.x1_init_point + self.x_range;
-                x2_min = self.x2_init_point - self.x_range;
-                x2_max = self.x2_init_point + self.x_range;
-                y_min = self.y_init_point  - self.y_range;
-                y_max = self.y_init_point  + self.y_range;
-                #print(f"x1_min,x1_max,x2_min,x2_max,y_min,y_max ={ x1_min, x1_max, x2_min, x2_max, y_min, y_max}")
-                pcd_x1_ind = self.pcd_serch(self.pcd_buff, x1_min, x1_max, y_min, y_max)
-                pcd_x2_ind = self.pcd_serch(self.pcd_buff, x2_min, x2_max, y_min, y_max)
-                #print(f"len(self.pcd_buff[0,pcd_x1_ind]), {len(self.pcd_buff[0,pcd_x1_ind])}")
-                #print(f"len(self.pcd_buff[0,pcd_x2_ind]), {len(self.pcd_buff[0,pcd_x2_ind])}")
-                if len(self.pcd_buff[0,pcd_x1_ind]) & len(self.pcd_buff[0,pcd_x2_ind]) > 0:
-                    pcd_x1 = self.pcd_buff[:,pcd_x1_ind]
-                    pcd_x2 = self.pcd_buff[:,pcd_x2_ind]
-                    #pcd_x1_closest_ind = np.abs(pcd_x1[0,:] - self.x1_init_point).argmin()
-                    z1_median = np.median(pcd_x1[2,:])
-                    pcd_x1_closest_ind = np.abs(pcd_x1[2,:]-z1_median).argmin()
-                    #pcd_x2_closest_ind = np.abs(pcd_x2[0,:] - self.x2_init_point).argmin()
-                    z2_median = np.median(pcd_x2[2,:])
-                    pcd_x2_closest_ind = np.abs(pcd_x2[2,:]-z2_median).argmin()
-                    #z= {slope}x + intercept
-                    slope = (pcd_x2[2,pcd_x2_closest_ind] - pcd_x1[2,pcd_x1_closest_ind]) / (pcd_x2[0,pcd_x2_closest_ind] - pcd_x1[0,pcd_x1_closest_ind])
-                    intercept = pcd_x1[2,pcd_x1_closest_ind] - slope*pcd_x1[0,pcd_x1_closest_ind]
-                    
-                    
-                    print(f"pcd_x1 x,y,z ={pcd_x1[0,pcd_x1_closest_ind], pcd_x1[1,pcd_x1_closest_ind], pcd_x1[2,pcd_x1_closest_ind]}")
-                    print(f"pcd_x2 x,y,z ={pcd_x2[0,pcd_x2_closest_ind], pcd_x2[1,pcd_x2_closest_ind], pcd_x2[2,pcd_x2_closest_ind]}")
-                    delta_x = pcd_x2[0,pcd_x2_closest_ind] - 0
-                    delta_z = - (intercept - pcd_x2[2,pcd_x2_closest_ind]) 
-                    theta = np.arctan2(delta_z, delta_x) /math.pi*180
-                    print(f"delta_x ={delta_x}")
-                    print(f"delta_z ={delta_z}")
-                    print(f"slope ={slope}")
-                    print(f"intercept ={intercept}")
-                    print(f"theta ={theta}")
-                    self.MID360_HIGHT = - intercept; #hight position[m]
-                    self.THETA_INIT_Y = self.THETA_INIT_Y + theta #[deg]
-                    self.initialize_calibration = 1
-                    #print(f"self.MID360_HIGHT ={self.MID360_HIGHT}")
-                    #print(f"self.THETA_INIT_Y ={self.THETA_INIT_Y}")
-                    
-        
-        #add mid height position
-        pointcloud_intensity[2,:] += self.MID360_HIGHT
-        #print(f"pointcloud_intensity ={pointcloud_intensity.shape}")
+        #sky segment
+        pcd_sky_height = self.height_segment(points, self.SKY_HIGHT_MIN, self.SKY_HIGHT_MAX)
+        pcd_sky = self.pcd_mask(pcd_sky_height, self.SKY_MASK_X_MIN, self.SKY_MASK_X_MAX, self.SKY_MASK_Y_MIN, self.SKY_MASK_Y_MAX)
+        print(f"pcd_sky_height ={pcd_sky_height.shape}")
+        print(f"pcd_sky ={pcd_sky.shape}")
         
         #publish for rviz2
-        if self.initialize_calibration == 1:
-            self.pcd_rotation = point_cloud_intensity_msg(pointcloud_intensity.T, t_stamp, 'map')
-            self.pcd_rotation_publisher.publish(self.pcd_rotation ) 
+        self.pcd_segment_sky = point_cloud_intensity_msg(pcd_sky.T, t_stamp, 'odom')
+        self.pcd_segment_sky_publisher.publish(self.pcd_segment_sky ) 
+        
+    def height_segment(self, pointcloud, height_min, height_max):
+        pcd_ind = ((height_min <= pointcloud[2,:]) * (pointcloud[2,:] <= height_max ))
+        pcd_segment = pointcloud[:, pcd_ind]
+        return pcd_segment
+        
+    def pcd_mask(self, pointcloud, x_min, x_max, y_min, y_max):
+        pcd_ind = (( (x_min <= pointcloud[0,:]) * (pointcloud[0,:] <= x_max)) * ((y_min <= pointcloud[1,:]) * (pointcloud[1,:]) <= y_max ) )
+        pcd_mask = pointcloud[:, ~pcd_ind]
+        return pcd_mask
         
     def pcd_serch(self, pointcloud, x_min, x_max, y_min, y_max):
-        pcd_ind_x = ((x_min <= pointcloud[0,:]) * (pointcloud[0,:] <= x_max )) 
-        pcd_ind_y = ((y_min <= pointcloud[1,:]) * (pointcloud[1,:] <= y_max ))
-        pcd_ind = pcd_ind_x * pcd_ind_y
-        return pcd_ind
+        pcd_ind = (( (x_min <= pointcloud[0,:]) * (pointcloud[0,:] <= x_max)) * ((y_min <= pointcloud[1,:]) * (pointcloud[1,:]) <= y_max ) )
+        pcd_mask = pointcloud[:, pcd_ind]
+        return pcd_mask
         
-def rotation_xyz(pointcloud, theta_x, theta_y, theta_z):
-    rad_x = math.radians(theta_x)
-    rad_y = math.radians(theta_y)
-    rad_z = math.radians(theta_z)
-    rot_x = np.array([[ 1,               0,                0],
-                      [ 0, math.cos(rad_x), -math.sin(rad_x)],
-                      [ 0, math.sin(rad_x),  math.cos(rad_x)]])
-    
-    rot_y = np.array([[ math.cos(rad_y), 0,  math.sin(rad_y)],
-                      [               0, 1,                0],
-                      [-math.sin(rad_y), 0,  math.cos(rad_y)]])
-    
-    rot_z = np.array([[ math.cos(rad_z), -math.sin(rad_z), 0],
-                      [ math.sin(rad_z),  math.cos(rad_z), 0],
-                      [               0,                0, 1]])
-    rot_matrix = rot_z.dot(rot_y.dot(rot_x))
-    #print(f"rot_matrix ={rot_matrix}")
-    #print(f"pointcloud ={pointcloud.shape}")
-    rot_pointcloud = rot_matrix.dot(pointcloud)
-    return rot_pointcloud, rot_matrix
 
 def point_cloud_intensity_msg(points, t_stamp, parent_frame):
     # In a PointCloud2 message, the point cloud is stored as an byte 
@@ -217,11 +139,11 @@ def main(args=None):
     # rclpyの初期化処理です。ノードを立ち上げる前に実装する必要があります。
     rclpy.init(args=args)
     # クラスのインスタンスを作成
-    pcd_rotation = PcdRotation()
+    pcd_height_segmentation = PcdHeightSegmentation()
     # spin処理を実行、spinをしていないとROS 2のノードはデータを入出力することが出来ません。
-    rclpy.spin(pcd_rotation)
+    rclpy.spin(pcd_height_segmentation)
     # 明示的にノードの終了処理を行います。
-    pcd_rotation.destroy_node()
+    pcd_height_segmentation.destroy_node()
     # rclpyの終了処理、これがないと適切にノードが破棄されないため様々な不具合が起こります。
     rclpy.shutdown()
 
@@ -229,5 +151,3 @@ def main(args=None):
 if __name__ == '__main__':
     # 関数`main`を実行する。
     main()
-
-
