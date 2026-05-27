@@ -74,6 +74,14 @@ def generate_launch_description():
             output='screen',
             arguments=[],
         ),
+
+        #odom combination glim
+        Node(package='orange_gnss',
+            executable='odom_combination_glim',
+            name='odom_combination_glim',
+            output='screen',
+            arguments=[],
+        ),
    
         #gps ekf edit
         Node(package='try_navigation',
