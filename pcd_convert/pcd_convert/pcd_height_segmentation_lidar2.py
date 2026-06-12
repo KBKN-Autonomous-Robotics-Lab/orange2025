@@ -15,7 +15,7 @@ class PcdHeightSegmentation(Node):
     # コンストラクタです、PcdHeightSegmentationクラスのインスタンスを作成する際に呼び出されます。
     def __init__(self):
         # 継承元のクラスを初期化します。
-        super().__init__('pcd_heigth_segmentation_node')
+        super().__init__('pcd_height_segmentation_node')
         
         qos_profile = QoSProfile(
             history=QoSHistoryPolicy.KEEP_LAST,
@@ -31,7 +31,7 @@ class PcdHeightSegmentation(Node):
         )
         
         # Subscriptionを作成。
-        self.subscription = self.create_subscription(sensor_msgs.PointCloud2, '/pcd_rotation2', self.pcd_heigth_segmentation, qos_profile) #set subscribe pcd topic name
+        self.subscription = self.create_subscription(sensor_msgs.PointCloud2, '/pcd_rotation2', self.pcd_height_segmentation, qos_profile) #set subscribe pcd topic name
         self.subscription  # 警告を回避するために設置されているだけです。削除しても挙動はかわりません。
         
         # Publisherを作成
@@ -63,7 +63,7 @@ class PcdHeightSegmentation(Node):
         
         return point_cloud_matrix
         
-    def pcd_heigth_segmentation(self, msg):
+    def pcd_height_segmentation(self, msg):
         
         #print stamp message
         t_stamp = msg.header.stamp
@@ -140,7 +140,7 @@ def main(args=None):
     rclpy.init(args=args)
     # クラスのインスタンスを作成
     pcd_height_segmentation = PcdHeightSegmentation()
-    # spin処理を実行、spinをしていないとROS 2のノードはデータを入出力することが出来ません。
+    # spin処理を実行、spinをしていないとROS 2のノードはデータを入出力することが出力することが出来ません。
     rclpy.spin(pcd_height_segmentation)
     # 明示的にノードの終了処理を行います。
     pcd_height_segmentation.destroy_node()
