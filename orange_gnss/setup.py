@@ -38,6 +38,8 @@ setup(
             "lonlat_to_odom = orange_gnss.lonlat_to_odom:main",
             "ekf_myself_noGPS = orange_gnss.ekf_myself_noGPS:main",
             "odom_combination = orange_gnss.odom_combination:main",
+            "odom_combination_glim = orange_gnss.odom_combination_glim:main",
+            "get_gnss_data_ttyUSB = orange_gnss.get_gnss_data_ttyUSB:main",
         ],
     },
 )

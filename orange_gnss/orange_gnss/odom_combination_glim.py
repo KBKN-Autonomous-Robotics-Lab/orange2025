@@ -22,11 +22,11 @@ class Odom_Combination(Node):
         )
         
         # subscription
-        self.odom_sub = self.create_subscription(Odometry, '/odom/wheel_spimu', self.get_odom, qos_profile)
-        self.gps_odom_sub = self.create_subscription(Odometry, '/odom/UM982', self.get_gps_odom, qos_profile)
+        self.odom_sub = self.create_subscription(Odometry, '/glim_ros/odom_corrected', self.get_odom, qos_profile)
+        self.gps_odom_sub = self.create_subscription(Odometry, '/odom/wheel_spimu', self.get_gps_odom, qos_profile)
         
         # publisher
-        self.odom_pub = self.create_publisher(Odometry, '/odom/combine', qos_profile)
+        self.odom_pub = self.create_publisher(Odometry, '/odom/combine_glim', qos_profile)
         
         self.position_x = 0.0
         self.position_y = 0.0
@@ -54,9 +54,8 @@ class Odom_Combination(Node):
             roll, pitch, yaw = quaternion_to_euler(x, y, z, w)
             self.initial_xy = (init_x, init_y)
             self.init_theta = yaw
-            init_degree = yaw * 180.0 / math.pi # for debug
             #self.yaw_offset = self.init_theta - self.theta_z
-            self.get_logger().info(f"Initial /odom/UM982 position set to: x={init_x:.3f}, y={init_y:.3f}, degree={init_degree:.3f}")   
+            self.get_logger().info(f"Initial /odom/UM982 position set to: x={init_x:.3f}, y={init_y:.3f}")   
     
     def yaw_to_orientation(self, yaw):
         orientation_z = np.sin(yaw / 2.0)
@@ -69,10 +68,12 @@ class Odom_Combination(Node):
             return
             
         pos_x = self.position_x
-        pos_y = self.position_y
+        pos_y = -self.position_y
+        #pos_x = self.position_y
+        #pos_y = self.position_x
         #degree_to_radian = math.pi / 180
         #pos_theta = self.theta * degree_to_radian # maybe -self.theta * degree_to_radian
-        pos_theta = self.theta_z + self.init_theta
+        pos_theta = -self.theta_z + self.init_theta
 
         # rotate init_theta for xy 
         cos_theta = math.cos(self.init_theta)
@@ -126,4 +127,5 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()          
+
 

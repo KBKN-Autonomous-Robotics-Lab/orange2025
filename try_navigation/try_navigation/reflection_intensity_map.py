@@ -65,8 +65,8 @@ class ReflectionIntensityMap(Node):
             depth = 1
         )
         # Subscriptionを作成。CustomMsg型,'/livox/lidar'という名前のtopicをsubscribe。
-        self.subscription = self.create_subscription(sensor_msgs.PointCloud2, '/pcd_segment_ground', self.reflect_map, qos_profile)
-        self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom_wheel', self.get_odom, qos_profile_sub)
+        self.subscription = self.create_subscription(sensor_msgs.PointCloud2, '/pcd_segment_high', self.reflect_map, qos_profile)
+        self.subscription = self.create_subscription(nav_msgs.Odometry,'/fusion/odom', self.get_odom, qos_profile_sub)
         self.subscription = self.create_subscription(nav_msgs.Odometry,'/fusion/odom', self.get_ekf_odom, qos_profile_sub)
         #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom_fast', self.get_odom, qos_profile_sub)
         self.subscription  # 警告を回避するために設置されているだけです。削除しても挙動はかわりません。
@@ -116,8 +116,8 @@ class ReflectionIntensityMap(Node):
         self.map_data_flag = 0
         self.map_data_gl = 0
         self.map_data_gl_flag = 0
-        self.MAKE_GL_MAP_FLAG = 0
-        self.save_dir = os.path.expanduser('~/ros2_ws/src/map/new_waypoint_map')
+        self.MAKE_GL_MAP_FLAG = 1
+        self.save_dir = os.path.expanduser('~/ros2_ws/src/map/high/new_waypoint_map')
         yaml.add_representer(OrderedDict, ordered_dict_representer, Dumper=MyDumper)
         yaml.add_representer(list, list_representer, Dumper=MyDumper)
         
@@ -225,12 +225,12 @@ class ReflectionIntensityMap(Node):
         ekf_ground_set_z = ekf_ground_rot[2,:] + ekf_position[2]
         ekf_ground_set = np.vstack((ekf_ground_set_x, ekf_ground_set_y, ekf_ground_set_z))
         map_data_set_4save = grid_map_set(ekf_ground_set[1,:], ekf_ground_set[0,:], ground_reflect_conv, ekf_position, self.ground_pixel, self.MAP_RANGE)
-        print(f"map_data_set ={map_data_set.shape}")
+        #print(f"map_data_set ={map_data_set.shape}")
 	
         #GL reflect map
         #map_data_gl_set = grid_map_set(self.pcd_ground_buff[1,:], self.pcd_ground_buff[0,:], ground_reflect_conv, position, self.ground_pixel, self.MAP_RANGE_GL)
         map_data_gl_set = grid_map_set(ekf_ground_set[1,:], ekf_ground_set[0,:], ground_reflect_conv, ekf_position, self.ground_pixel, self.MAP_RANGE_GL)
-        print(f"map_data_set ={map_data_set.shape}")
+        #print(f"map_data_set ={map_data_set.shape}")
 	
         
         #publish for rviz2 

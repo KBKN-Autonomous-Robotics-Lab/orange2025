@@ -25,7 +25,7 @@ def generate_launch_description():
     odom = LaunchConfiguration('odom')
     declare_odom_arg = DeclareLaunchArgument(
         'odom',
-        default_value='/fusion/odom',
+        default_value='/odom_ekf_match', # odom_ekf_match
         description='Odometry topic name'
     )
     
@@ -52,6 +52,7 @@ def generate_launch_description():
             executable='rviz2',
             name='rviz2',
             arguments=['-d', rviz_config_dir],
+            parameters=[{'use_sim_time': False}],
             output='screen'
         ),
         #get livox data
@@ -64,6 +65,21 @@ def generate_launch_description():
             executable='pcd_rotation',
             name='pcd_rotation_node',
             output='screen',
+            parameters=[{'use_sim_time': False}],
+            arguments=[]
+        ),
+        Node(package='pcd_convert',
+            executable='pcd_rotation_lidar2',
+            name='pcd_rotation_lidar2_node',
+            output='screen',
+            parameters=[{'use_sim_time': False}],
+            arguments=[]
+        ),
+        Node(package='pcd_convert',
+            executable='pcd_merge',
+            name='pointcloud_merger_node',
+            output='screen',
+            parameters=[{'use_sim_time': False}],
             arguments=[]
         ),
         
@@ -72,6 +88,7 @@ def generate_launch_description():
             executable='odom_combination',
             name='odom_combination',
             output='screen',
+            parameters=[{'use_sim_time': False}],
             arguments=[],
         ),
    
@@ -80,6 +97,7 @@ def generate_launch_description():
             executable='ekf_myself_gps',
             name='sensor_fusion',
             output='screen',
+            parameters=[{'use_sim_time': False}],
             arguments=[]
         ),
         
@@ -88,6 +106,7 @@ def generate_launch_description():
             executable='pcd_height_segmentation',
             name='pcd_heigth_segmentation_node',
             output='screen',
+            parameters=[{'use_sim_time': False}],
             arguments=[]
         ),
         
@@ -96,6 +115,7 @@ def generate_launch_description():
             executable='pcd_reflect_segmentation',
             name='pcd_reflect_segmentation_node',
             output='screen',
+            parameters=[{'use_sim_time': False}],
             arguments=[]
         ),
         
@@ -109,15 +129,15 @@ def generate_launch_description():
         
         #waypoint manager
         # waypoint gps command
-        Node(package='navigation_control',
-            executable='gps_waypoint',
-            name='gps_waypoint',
-            output='screen',
-            parameters=[{'odom': odom},
-                        {'waypoint_path': waypoint_path},
-                        {'waypoint_start_index': waypoint_start_index}],
-            arguments=[],
-        ),
+        #Node(package='navigation_control',
+        #    executable='gps_waypoint',
+        #    name='gps_waypoint',
+        #    output='screen',
+        #    parameters=[{'odom': odom},
+        #                {'waypoint_path': waypoint_path},
+        #                {'waypoint_start_index': waypoint_start_index}],
+        #    arguments=[],
+        #),
         # $ ros2 run navigation_control gps_waypoint
         # file path /ros2_ws/src/Use_action/navigation_control/navigation_control/gps_waypoint
         
@@ -128,28 +148,29 @@ def generate_launch_description():
         #    output='screen',
         #    arguments=[],
         #),
-        #path planning
+        ##path planning
         Node(package='try_navigation',
             executable='potential_astar',
             name='potential_astar_node',
             output='screen',
-            parameters=[{'odom': odom}],
+            parameters=[{'odom': odom}, {'use_sim_time': False}],
             arguments=[],
         ),
         #robot ctrl
-        #Node(package='try_navigation',
-        #    executable='path_follower',
-        #    name='path_follower_node',
-        #    output='screen',
-        #    parameters=[{'odom': odom}],
-        #    arguments=[],
-        #),
+        Node(package='try_navigation',
+            executable='path_follower',
+            name='path_follower_node',
+            output='screen',
+            parameters=[{'odom': odom}, {'use_sim_time': False}],
+            arguments=[],
+        ),
         
         #navigation start
         Node(package='navigation_control',
             executable='button',
             name='button',
             output='screen',
+            parameters=[{'use_sim_time': True}],
             arguments=[],
         ),
         #takamori Autonav

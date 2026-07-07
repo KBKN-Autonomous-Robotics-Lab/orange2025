@@ -45,7 +45,7 @@ class PcdRotation(Node):
         #上下反転  LiDAR init
         self.THETA_INIT_X = 180.5 #[deg]
         self.THETA_INIT_Y = 2.663 #[deg] 2.663001576990896
-        self.THETA_INIT_Z = 0 #[deg]
+        self.THETA_INIT_Z = 0.0 #[deg] -177.617
         
         #initialize calibration
         self.initialize_calibration = 1
@@ -144,7 +144,7 @@ class PcdRotation(Node):
         
         #publish for rviz2
         if self.initialize_calibration == 1:
-            self.pcd_rotation = point_cloud_intensity_msg(pointcloud_intensity.T, t_stamp, 'map')
+            self.pcd_rotation = point_cloud_intensity_msg(pointcloud_intensity.T, t_stamp, 'livox_frame')
             self.pcd_rotation_publisher.publish(self.pcd_rotation ) 
         
     def pcd_serch(self, pointcloud, x_min, x_max, y_min, y_max):

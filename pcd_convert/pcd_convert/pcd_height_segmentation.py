@@ -31,26 +31,34 @@ class PcdHeightSegmentation(Node):
         )
         
         # Subscriptionを作成。
-        self.subscription = self.create_subscription(sensor_msgs.PointCloud2, '/pcd_rotation', self.pcd_heigth_segmentation, qos_profile) #set subscribe pcd topic name
+        self.subscription = self.create_subscription(sensor_msgs.PointCloud2, '/pcd_rotation_merge', self.pcd_heigth_segmentation, qos_profile) #set subscribe pcd topic name /pcd_rotation_merge
         self.subscription  # 警告を回避するために設置されているだけです。削除しても挙動はかわりません。
         
         # Publisherを作成
         self.pcd_segment_obs_publisher = self.create_publisher(sensor_msgs.PointCloud2, 'pcd_segment_obs', qos_profile) #set publish pcd topic name
         self.pcd_segment_ground_publisher = self.create_publisher(sensor_msgs.PointCloud2, 'pcd_segment_ground', qos_profile) #set publish pcd topic name
+        self.pcd_segment_middle_publisher = self.create_publisher(sensor_msgs.PointCloud2, 'pcd_segment_middle', qos_profile) #set publish pcd topic name
+        self.pcd_segment_high_publisher = self.create_publisher(sensor_msgs.PointCloud2, 'pcd_segment_high', qos_profile) #set publish pcd topic name
         self.pcd_segment_step_publisher = self.create_publisher(sensor_msgs.PointCloud2, 'pcd_segment_step', qos_profile) #set publish pcd topic name
         self.pcd_segment_low_step_publisher = self.create_publisher(sensor_msgs.PointCloud2, 'pcd_segment_low_step', qos_profile) #set publish pcd topic name
         
         #パラメータ
         #set obs range
-        self.OBS_HIGHT_MIN =   200/1000; #hight range[m]
-        self.OBS_HIGHT_MAX =  4000/1000; #hight range[m]
+        self.OBS_HIGHT_MIN =   150/1000; #hight range[m]
+        self.OBS_HIGHT_MAX =  1000/1000; #hight range[m]
         self.OBS_MASK_X_MIN = -550/1000; #x mask range[m]
         self.OBS_MASK_X_MAX =  400/1000; #x mask range[m]
         self.OBS_MASK_Y_MIN = -350/1000; #y mask range[m]
         self.OBS_MASK_Y_MAX =  350/1000; #y mask range[m]
         #set ground range
-        self.GROUND_HIGHT_MIN = -10/1000; #hight range[m] # IGVC20250601 -150 -> -10
-        self.GROUND_HIGHT_MAX =  150/1000; #hight range[m]
+        self.GROUND_HIGHT_MIN = -150/1000; #hight range[m] # IGVC20250601 -150 -> -10
+        self.GROUND_HIGHT_MAX =  120/1000; #hight range[m]
+        #set middle range
+        self.MIDDLE_HIGHT_MIN = 500/1000; #hight range[m] # IGVC20250601 -150 -> -10
+        self.MIDDLE_HIGHT_MAX = 1000/1000; #hight range[m]
+        #set high range
+        self.HIGH_HIGHT_MIN = 2000/1000; #hight range[m] # IGVC20250601 -150 -> -10
+        self.HIGH_HIGHT_MAX = 4000/1000; #hight range[m]
         #set step range
         self.STEP_HIGHT_MIN =   140/1000; #hight range[m]
         self.STEP_HIGHT_MAX =   self.OBS_HIGHT_MIN# 200/1000; #hight range[m]
@@ -101,6 +109,14 @@ class PcdHeightSegmentation(Node):
         #ground segment
         pcd_ground = self.height_segment(points, self.GROUND_HIGHT_MIN, self.GROUND_HIGHT_MAX)
         print(f"pcd_ground ={pcd_ground.shape}")
+
+        #middle segment
+        pcd_middle = self.height_segment(points, self.MIDDLE_HIGHT_MIN, self.MIDDLE_HIGHT_MAX)
+        print(f"pcd_middle ={pcd_middle.shape}")
+
+        #high segment
+        pcd_high = self.height_segment(points, self.HIGH_HIGHT_MIN, self.HIGH_HIGHT_MAX)
+        print(f"pcd_high ={pcd_high.shape}")
         
         #step segment
         pcd_step = self.height_segment(points, self.STEP_HIGHT_MIN, self.STEP_HIGHT_MAX)
@@ -116,13 +132,17 @@ class PcdHeightSegmentation(Node):
         pcd_low_step = self.pcd_serch(pcd_low_step, self.LOW_STEP_X_MIN, self.LOW_STEP_X_MAX, self.LOW_STEP_Y_MIN, self.LOW_STEP_Y_MAX)
         
         #publish for rviz2
-        self.pcd_segment_obs = point_cloud_intensity_msg(pcd_obs.T, t_stamp, 'odom')
+        self.pcd_segment_obs = point_cloud_intensity_msg(pcd_obs.T, t_stamp, 'livox_frame')
         self.pcd_segment_obs_publisher.publish(self.pcd_segment_obs ) 
-        self.pcd_segment_ground = point_cloud_intensity_msg(pcd_ground.T, t_stamp, 'odom')
+        self.pcd_segment_ground = point_cloud_intensity_msg(pcd_ground.T, t_stamp, 'livox_frame')
         self.pcd_segment_ground_publisher.publish(self.pcd_segment_ground ) 
-        self.pcd_segment_step = point_cloud_intensity_msg(pcd_step.T, t_stamp, 'odom')
+        self.pcd_segment_middle = point_cloud_intensity_msg(pcd_middle.T, t_stamp, 'livox_frame')
+        self.pcd_segment_middle_publisher.publish(self.pcd_segment_middle ) 
+        self.pcd_segment_high = point_cloud_intensity_msg(pcd_high.T, t_stamp, 'livox_frame')
+        self.pcd_segment_high_publisher.publish(self.pcd_segment_high ) 
+        self.pcd_segment_step = point_cloud_intensity_msg(pcd_step.T, t_stamp, 'livox_frame')
         self.pcd_segment_step_publisher.publish(self.pcd_segment_step ) 
-        self.pcd_segment_low_step = point_cloud_intensity_msg(pcd_low_step.T, t_stamp, 'odom')
+        self.pcd_segment_low_step = point_cloud_intensity_msg(pcd_low_step.T, t_stamp, 'livox_frame')
         self.pcd_segment_low_step_publisher.publish(self.pcd_segment_low_step ) 
         
     def height_segment(self, pointcloud, height_min, height_max):

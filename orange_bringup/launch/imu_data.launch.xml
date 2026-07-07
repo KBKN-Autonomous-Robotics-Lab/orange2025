@@ -10,7 +10,7 @@
   <arg name="debug_imu" default="false"/>
   <arg name="publish_TF" default="false"/>
   <arg name="publish_odom" default="true"/>
-  <arg name="use_sim_time" default="false"/>
+  <arg name="use_sim_time" default="true"/>
   <arg name="twist_cmd_vel_topic" default="/cmd_vel"/>
   <arg name="cmd_vel_topic" default="/vel/cmd_vel"/>
   <arg name="cmd_rpm_topic" default="/vel/cmd_rpm"/>
@@ -31,7 +31,10 @@
   <arg name="estop_topic" default="/estop"/>
   <arg name="xacro_file_path" default="$(find-pkg-share orange_description)/xacro/orange_robot.xacro"/>
   <arg name="motor_driver_config_file_path" default="$(find-pkg-share orange_bringup)/config/motor_driver_params.yaml"/>
-  
+  <!-- robot_state_publisher -->
+  <node pkg="robot_state_publisher" exec="robot_state_publisher">
+    <param name="robot_description" value="$(command 'xacro $(var xacro_file_path)')"/>
+  </node>
   <!-- madgwick filter node -->
   <node pkg="imu_filter_madgwick" exec="imu_filter_madgwick_node" name="madgwick_filter">
     <param from="$(find-pkg-share cxd5602pwbimu)/config/madgwick.yaml"/>

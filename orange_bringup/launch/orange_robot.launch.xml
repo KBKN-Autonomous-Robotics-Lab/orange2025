@@ -29,6 +29,12 @@
   <arg name="merged_scan_topic" default="/merged_scan"/>
   <arg name="nav_topic" default="/nav_state"/>
   <arg name="estop_topic" default="/estop"/>
+  <!-- initial heading:housei nakaniwa=179.169287 tsukuba= 93.0 -->
+  <!-- initial start_lat:housei nakaniwa=35.425952230280004 tsukuba right=36.04974095972727 tsukuba_left=36.04976195993636 -->
+  <!-- initial start_lon:housei nakaniwa=139.31380123427 tsukuba right=140.04593633886364 tsukuba_left=140.04593755179093 -->
+  <arg name="start_lat" default="35.425952230280004"/>
+  <arg name="start_lon" default="139.31380123427"/>
+  <arg name="start_heading" default="0.0"/>
   <arg name="xacro_file_path" default="$(find-pkg-share orange_description)/xacro/orange_robot.xacro"/>
   <arg name="motor_driver_config_file_path" default="$(find-pkg-share orange_bringup)/config/motor_driver_params.yaml"/>
   <!-- robot_state_publisher -->
@@ -36,9 +42,9 @@
     <param name="robot_description" value="$(command 'xacro $(var xacro_file_path)')"/>
   </node>
   <!-- joint_state_publisher -->
-  <node pkg="joint_state_publisher" exec="joint_state_publisher">
+  <!--<node pkg="joint_state_publisher" exec="joint_state_publisher">
     <param name="robot_description" value="$(command 'xacro $(var xacro_file_path)')"/>
-  </node>
+  </node>-->
   <!-- motor_driver_node -->
   <node pkg="orange_bringup" exec="motor_driver_node" output="screen">
     <param from="$(var motor_driver_config_file_path)"/>
@@ -95,6 +101,7 @@
   </node>
 
   <!-- imu  -->
+  <!--
   <include file="$(find-pkg-share icm_20948)/launch/run.launch.xml">
     <arg name="port" value="/dev/sensors/imu"/>
     <arg name="time_out" value="0.5"/>
@@ -102,7 +109,7 @@
     <arg name="imu_topic" value="imu"/>
     <arg name="frame_id" value="imu_link"/>
     <arg name="debug" value="$(var debug_imu)"/>
-  </include>
+  </include>-->
   <!-- robot_localization -->
   <!--<include file="$(find-pkg-share orange_sensor_tools)/launch/localization.launch.xml">
     <arg name="odom_in" value="$(var odom_topic)"/>
@@ -111,17 +118,20 @@
   </include>-->
   <!-- GPSposition_publisher -->
   <!-- GPSheading_publisher -->
-  <!-- initial heading:housei nakaniwa=179.169287 tsukuba= 93.0 -->
-  <!-- initial start_lat:housei nakaniwa=35.425952230280004 tsukuba right=36.04974095972727 tsukuba_left=36.04976195993636 -->
-  <!-- initial start_lon:housei nakaniwa=139.31380123427 tsukuba right=140.04593633886364 tsukuba_left=140.04593755179093 -->
-  <node pkg="orange_gnss" exec="gnss_odom_movingbase_fix_publisher_ttyUSB" output="screen">
+  <node pkg="orange_gnss" exec="get_gnss_data_ttyUSB" output="screen">
     <param name="port" value="/dev/sensors/GNSS_UM982"/>
     <param name="baud" value="115200"/>
     <param name="country_id" value="0"/>
+    <param name="heading" value="$(var start_heading)"/>
+    <param name="start_lat" value="$(var start_lat)"/>
+    <param name="start_lon" value="$(var start_lon)"/>
+    <param name="time_out" value="1.0"/>
+  </node>
+  <node pkg="orange_gnss" exec="gnss_odom_publisher_ttyUSB" output="screen">
     <param name="Position_magnification" value="1.675"/>
-    <param name="heading" value="93.0"/>
-    <param name="start_lat" value="36.04974095972727"/>
-    <param name="start_lon" value="140.04593633886364"/>
+    <param name="heading" value="$(var start_heading)"/>
+    <param name="start_lat" value="$(var start_lat)"/>
+    <param name="start_lon" value="$(var start_lon)"/>
     <param name="time_out" value="1.0"/>
   </node>
   <!-- 

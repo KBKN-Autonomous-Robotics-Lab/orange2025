@@ -18,6 +18,18 @@ def generate_launch_description():
             arguments=[]
         ),
         Node(package='pcd_convert',
+            executable='pcd_rotation_lidar2',
+            name='pcd_rotation_lidar2_node',
+            output='screen',
+            arguments=[]
+        ),
+        Node(package='pcd_convert',
+            executable='pcd_merge',
+            name='pointcloud_merger_node',
+            output='screen',
+            arguments=[]
+        ),
+        Node(package='pcd_convert',
             executable='pcd_height_segmentation',
             name='pcd_heigth_segmentation_node',
             output='screen',

@@ -62,10 +62,10 @@ class PathFollower(Node):
         # Subscriptionを作成。
         self.subscription = self.create_subscription(nav_msgs.Path, '/potential_astar_path', self.get_path, qos_profile) #set subscribe pcd topic name
         #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom/wheel_imu', self.get_odom, qos_profile_sub) # /odom/wheel_spimu
-        self.subscription = self.create_subscription(nav_msgs.Odometry,'/fusion/odom', self.get_odom, qos_profile_sub)
+        self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom_ekf_match', self.get_odom, qos_profile_sub)
         #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom_ekf_match', self.get_odom, qos_profile_sub)
         #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom_ref_slam', self.get_odom_ref, qos_profile_sub)
-        self.subscription = self.create_subscription(nav_msgs.Odometry,'/fusion/odom', self.get_odom_ref, qos_profile_sub) #/fusion/odom
+        self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom_ekf_match', self.get_odom_ref, qos_profile_sub) #/fusion/odom
         self.subscription = self.create_subscription(sensor_msgs.PointCloud2, '/pcd_segment_obs', self.obs_steer, qos_profile)
         self.step_sub = self.create_subscription(sensor_msgs.PointCloud2, '/pcd_segment_low_step', self.low_obs_steer, qos_profile)
         self.goal_sub = self.create_subscription(PoseStamped, '/goal_pose', self.goal_pose_callback, qos_profile)
@@ -113,6 +113,10 @@ class PathFollower(Node):
         self.e_n1 = 0;
         self.k_p = 0.6;
         self.k_d = 0.3;
+
+        self.max_acc = 0.1
+        self.max_dec = 0.3
+        self.last_speed = 0.0
         
         self.stop_xy_test = [8, 10, -10, 10]
         self.stop_xy_test_flag = 1
@@ -691,12 +695,23 @@ class PathFollower(Node):
         target_theta = target_theta +90     ######/180*math.pi
         target_rad_pd = self.sensim0(target_rad)
         #target_rad_pd = target_rad
+        last_speed = self.last_speed
+        acc = self.max_acc * 0.05
+        dec = self.max_dec * 0.05
+
+        if speed > last_speed:
+            last_speed = min(last_speed + acc, speed)
+        else:
+            last_speed = max(last_speed - dec, speed)
         
+        self.last_speed = last_speed
+
         #make msg
         twist_msg = geometry_msgs.Twist()
         #check stop flag
         if self.stop_flag == 0:
-            twist_msg.linear.x = speed #0.3  # 前進速度 (m/s)
+            #twist_msg.linear.x = speed #0.3  # 前進速度 (m/s)
+            twist_msg.linear.x = last_speed #0.3  # 前進速度 (m/s)
             twist_msg.angular.z = target_rad_pd  # 角速度 (rad/s)
             #twist_msg.linear.x = -speed #0.3  # 前進速度 (m/s)
             #twist_msg.angular.z = -target_rad_pd # 角速度 (rad/s) back left to left

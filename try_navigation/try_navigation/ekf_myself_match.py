@@ -65,7 +65,7 @@ class ExtendedKalmanFilter(Node):
         self.br = tf2_ros.TransformBroadcaster(self)
 
         #self.fused_pub = self.create_publisher(Odometry, '/fusion/odom', 10)
-        self.fused_pub = self.create_publisher(Odometry, '/odom_ekf_match', 10)
+        self.fused_pub = self.create_publisher(Odometry, '/odom_ekf', 10)
         self.fused_msg = Odometry()
 
         self.timer = self.create_timer(0.1, self.publish_fused_value)
