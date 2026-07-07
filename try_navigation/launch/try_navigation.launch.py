@@ -170,7 +170,7 @@ def generate_launch_description():
             executable='button',
             name='button',
             output='screen',
-            parameters=[{'use_sim_time': True}],
+            parameters=[{'use_sim_time': False}],
             arguments=[],
         ),
         #takamori Autonav
